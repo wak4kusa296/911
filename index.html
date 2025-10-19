@@ -132,10 +132,10 @@ function qms(ms,q=10){return Math.max(q,Math.round(ms/q)*q);}
 const TYPES=[
   {key:"traffic_accident",ja:"交通事故",ch:"RED",unitType:"traffic"},
   {key:"theft",ja:"窃盗事件",ch:"RED",unitType:"investigation"},
-  {key:"suspicious",ja:"不審人物",ch:"OPS",unitType:"patrol"},
+  {key:"suspicious",ja:"不審車両",ch:"OPS",unitType:"patrol"},
   {key:"traffic_violation",ja:"交通違反",ch:"GREEN",unitType:"traffic"}
 ];
-const ZONES=["1丁目","2丁目","3丁目","みなと通り","中央駅前","第二郵便局前"];
+const ZONES=["1丁目","2丁目","3丁目","みなと通り","幹線12号","湾岸23号"];
 
 // ユニットタイプ別の番号
 const UNIT_TYPES={
@@ -147,10 +147,10 @@ const UNIT_TYPES={
 const PHRASES={
   dispatch:["警視庁から{unit}、{zone}、{type_ja}の110番通報。至急現場へ転進せよ。","{zone}付近、{type_ja}。{unit}、対応願いたい。"],
   enroute:["{unit}から本部、{zone}へ向かっております。到着予定{eta}分。","{unit}了解。{zone}方向へ移動中。"],
-  on_scene:["{unit}から本部、現着しました。状況確認中。","{unit}、現場到着。特徴一致の{num}名を発見。"],
+  on_scene:["{unit}から本部、現着しました。状況確認中。","{unit}、現場到着。特徴一致の車両を発見。"],
   backup:["{unit}から本部、{zone}にて応援要請。至急支援願いたい。","本部から各車、{zone}で{type_ja}、応援求む。"],
   backup_response:["本部から{unit}、{zone}、応援要請あり。至急現場へ転進せよ。","{unit}、{zone}へ応援に向かえ。"],
-  clear:["{unit}から本部、処理完了。所轄へ戻ります。","{unit}、事案処理終了。"]
+  clear:["{unit}から本部、処理完了。巡回密航へ戻ります。","{unit}、事案処理終了。"]
 };
 
 function updateCaseStatus(){
@@ -313,29 +313,56 @@ async function getClockOffsetMs(){try{const t0=performance.now();const res=await
 })();
 
 // 音声
-function ensureAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==="suspended")audioCtx.resume();}
-function toneNTT(kind){
-  if(!audioCtx)return;
-  const p={pip:{f:2000,dur:40,g:0.35},pop:{f:500,dur:100,g:0.30},peen:{f:1000,dur:520,g:0.26}}[kind];
-  const ctx=audioCtx,t0=ctx.currentTime;
-  const osc=ctx.createOscillator();osc.type='square';osc.frequency.value=p.f;
-  const gain=ctx.createGain();gain.gain.value=0;
-  const filter=ctx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=p.f*1.4;
-  osc.connect(filter);filter.connect(gain);gain.connect(ctx.destination);
-  gain.gain.setValueAtTime(0,t0);gain.gain.linearRampToValueAtTime(p.g,t0+0.003);gain.gain.exponentialRampToValueAtTime(0.001,t0+p.dur/1000);
-  osc.start(t0);osc.stop(t0+p.dur/1000+0.1);
+function ensureAudio(){
+  if(!audioCtx)
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if(audioCtx.state === "suspended")
+    audioCtx.resume();
 }
+
+function toneNTT(kind){
+  if(!audioCtx) return;
+  const p = {
+    pip:  { f:2000, dur:40,  g:0.03, atk:0.004, dec:0.030, rel:0.030, h2:0.18 },
+    pop:  { f:500,  dur:100, g:0.06,  atk:0.006, dec:0.050, rel:0.060, h2:0.20 },
+    peen: { f:1000, dur:600, g:0.06,  atk:0.008, dec:0.200, rel:0.300, h2:0.25 }
+  }[kind];
+
+  const ctx = audioCtx, t0 = ctx.currentTime;
+  const osc = ctx.createOscillator(); osc.type = 'square'; osc.frequency.value = p.f;
+  const gain = ctx.createGain(); gain.gain.value = 0;
+  const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = p.f * 1.4;
+  osc.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+
+  const g = gain.gain;
+  const t1 = t0 + p.atk;                      // Attack
+  const t2 = t1 + p.dec;                      // Decay
+  const t3 = t0 + (p.dur / 1000) * 0.7;       // Sustain (約70%)
+  const t4 = t0 + (p.dur / 1000);             // Release開始
+  const t5 = t4 + p.rel;                      // 終了
+
+  g.setValueAtTime(0, t0);
+  g.linearRampToValueAtTime(p.g, t1);         // Attack上昇
+  g.linearRampToValueAtTime(p.g * 0.8, t2);   // Decay減衰
+  g.setValueAtTime(p.g * 0.8, t3);            // Sustain維持
+  g.linearRampToValueAtTime(0.0001, t5);      // Releaseフェードアウト
+
+  osc.start(t0);
+  osc.stop(t5 + 0.05);
+}
+
 function startTimeSignal(){
-  if(tickTimer)clearInterval(tickTimer);
-  tickTimer=setInterval(()=>{
-    const now=Date.now()+clockOffset;
-    if(now%1000>=8)return;
-    const s=Math.floor(now/1000)%60;
-    if(s%10===0){toneNTT('peen');return;}
-    if(s===27||s===28||s===29||s===57||s===58||s===59){toneNTT('pop');return;}
+  if(tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(()=>{
+    const now = Date.now() + clockOffset;
+    if(now % 1000 >= 8) return;
+    const s = Math.floor(now / 1000) % 60;
+    if(s % 10 === 0){ toneNTT('peen'); return; }
+    if(s === 27 || s === 28 || s === 29 || s === 57 || s === 58 || s === 59){ toneNTT('pop'); return; }
     toneNTT('pip');
   },4);
 }
+
 
 function startWhiteNoise(){
   if(!audioCtx||noiseNode)return;
