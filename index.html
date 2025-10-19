@@ -47,82 +47,14 @@ main{flex:1;padding:16px;max-width:1600px;width:100%;margin:0 auto}
 .msg{white-space:pre-wrap;line-height:1.6;font-size:13px;font-family:'Noto Sans JP',sans-serif;text-transform:none}
 </style>
 
-<!-- ==== PWA最小セット（単一HTML直置き版） ==== -->
+<!-- head 内：PWAメタ -->
+<link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#0d1117">
 
-<!-- iOS: ホーム画面用フルスクリーン化 -->
+<!-- iOSでホーム追加したとき用（任意） -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="事案追跡">
-
-<!-- iOS: アイコン（データURLで内蔵。必要なら差し替えてOK） -->
-<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABl8ba/AAA...（省略可：任意のbase64 PNG）">
-
-<script>
-/* 単一HTML内で Web App Manifest を動的生成してリンク */
-(function(){
-  const manifest = {
-    name: "無線観測シミュ｜事案追跡システム",
-    short_name: "事案追跡",
-    start_url: "./?source=pwa",
-    scope: "./",
-    display: "standalone",
-    background_color: "#0d1117",
-    theme_color: "#0d1117",
-    lang: "ja",
-    icons: [
-      // iOSは manifest の icons を基本使いませんが、他ブラウザ向けに入れておく
-      { src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABl8ba/AAA...", sizes: "192x192", type: "image/png" },
-      { src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABl8ba/AAA...", sizes: "512x512", type: "image/png", purpose: "any maskable" }
-    ]
-  };
-  const blob = new Blob([JSON.stringify(manifest)], {type: 'application/manifest+json'});
-  const link = document.createElement('link');
-  link.rel = 'manifest';
-  link.href = URL.createObjectURL(blob);
-  document.head.appendChild(link);
-})();
-</script>
-<!-- ==== /PWA最小セット ==== -->
-
-<!-- Android向け：単一HTMLでの最小PWA化（オフラインなし） -->
-<meta name="theme-color" content="#0d1117">
-
-<script>
-/* 動的に Web App Manifest を生成して link する */
-(function () {
-  const manifest = {
-    name: "無線観測シミュ｜事案追跡システム",
-    short_name: "事案追跡",
-    start_url: "./?source=pwa",
-    scope: "./",
-    display: "standalone",
-    background_color: "#0d1117",
-    theme_color: "#0d1117",
-    lang: "ja",
-    icons: [
-      {
-        src: "data:image/png;base64,____BASE64_192PX____",
-        sizes: "192x192",
-        type: "image/png",
-        purpose: "any maskable"
-      },
-      {
-        src: "data:image/png;base64,____BASE64_512PX____",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "any maskable"
-      }
-    ]
-  };
-  const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
-  const link = document.createElement("link");
-  link.rel = "manifest";
-  link.href = URL.createObjectURL(blob);
-  document.head.appendChild(link);
-})();
-</script>
-
+<link rel="apple-touch-icon" href="./icons/maskable-192.png">
 
 </head>
 <body>
@@ -668,6 +600,12 @@ async function initTTS(){
   });
 }
 // --- PATCH END ---
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(console.error);
+  });
+}
 
 </script>
 </body>
