@@ -443,26 +443,59 @@ document.getElementById("rateSlider").addEventListener('input',()=>{
   document.getElementById("rateValue").textContent=ttsRate.toFixed(1);
 });
 
-function speakAndHighlight(ev,msgEl,seed,cpsBase){
-  if(!('speechSynthesis'in window))return Promise.resolve();
+// --- PATCH START (iPad TTS: speakAndHighlight replacement) ---
+async function speakAndHighlight(ev, msgEl, seed, cpsBase){
+  if(!('speechSynthesis' in window)) return Promise.resolve();
+
   ensureAudio();
-  const typePromise=typeOut(seed,cpsBase,ev,msgEl);
-  playTransmitStart();
-  setTimeout(()=>startWhiteNoise(),100);
-  const utter=new SpeechSynthesisUtterance(ev.msg);
-  utter.lang=(chosenVoice?.lang)||'ja-JP';
-  utter.voice=chosenVoice||null;
-  utter.rate=ttsRate;
-  utter.pitch=1.0;
-  utter.volume=1.0;
-  const speakPromise=new Promise((resolve)=>{
-    utter.onend=()=>{stopWhiteNoise();playTransmitEnd();resolve();};
-    utter.onerror=()=>{stopWhiteNoise();playTransmitEnd();resolve();};
-    try{speechSynthesis.cancel();}catch{}
-    speechSynthesis.speak(utter);
+  const typePromise = typeOut(seed, cpsBase, ev, msgEl);
+
+  // iPad/SafariはTTSとWebAudioの同時再生で無音化しやすい → 先に一時停止
+  let suspended = false;
+  if(isiOS() && audioCtx && audioCtx.state === 'running'){
+    await audioCtx.suspend();
+    suspended = true;
+  }
+
+  // iOSは同時再生を避けるためビープ/ノイズを鳴らさない
+  if(!isiOS()){
+    playTransmitStart();
+    setTimeout(()=>startWhiteNoise(), 100);
+  }
+
+  const utter = new SpeechSynthesisUtterance(ev.msg);
+  utter.lang   = (chosenVoice?.lang) || 'ja-JP';
+  utter.voice  = chosenVoice || null;             // nullでもOK（既定声）
+  utter.rate   = isiOS() ? Math.min(ttsRate, 1.2) : ttsRate; // iOSは速すぎると無音化しやすい
+  utter.pitch  = 1.0;
+  utter.volume = 1.0;
+
+  const speakPromise = new Promise((resolve)=>{
+    const cleanup = async ()=>{
+      if(!isiOS()){ stopWhiteNoise(); playTransmitEnd(); }
+      if(suspended && audioCtx?.state === 'suspended'){
+        try{ await audioCtx.resume(); }catch{}
+      }
+      resolve();
+    };
+    utter.onend   = cleanup;
+    utter.onerror = cleanup;
+
+    // 直前の発話だけを止める（直後の speak を潰さない）
+    try{
+      if(speechSynthesis.speaking || speechSynthesis.pending){
+        speechSynthesis.cancel();
+      }
+    }catch{}
+
+    // iOSで cancel 直後の speak が潰れる件の回避：0ms遅延で次フレームに投げる
+    setTimeout(()=>{ try{ speechSynthesis.speak(utter); }catch{ cleanup(); } }, 0);
   });
-  return Promise.all([typePromise,speakPromise]);
+
+  return Promise.all([typePromise, speakPromise]);
 }
+// --- PATCH END ---
+
 
 // メインループ
 async function runFromNow(seed,cpsBase){
@@ -518,23 +551,46 @@ async function runFromNow(seed,cpsBase){
 }
 
 // イベントリスナー
-document.getElementById("syncBtn").addEventListener("click",async()=>{
+document.getElementById("syncBtn").addEventListener("click", async ()=>{
   console.log("Button clicked!");
   ensureAudio();
-  clockOffset=await getClockOffsetMs();
+  await initTTS();                       // ★ 追加
+  clockOffset = await getClockOffsetMs();
   startTimeSignal();
-  runFromNow(FIXED_SEED,BASE_CPS);
+  runFromNow(FIXED_SEED, BASE_CPS);
 });
 
-document.getElementById("ttsToggle").addEventListener("click",()=>{
-  TTS_ENABLED=!TTS_ENABLED;
-  const btn=document.getElementById("ttsToggle");
-  btn.textContent=`VOICE: ${TTS_ENABLED?"ON":"OFF"}`;
-  btn.className=TTS_ENABLED?"":"ghost";
-  try{if('speechSynthesis'in window)speechSynthesis.cancel();}catch{}
+document.getElementById("ttsToggle").addEventListener("click", async ()=>{
+  await initTTS();                       // ★ 追加
+  TTS_ENABLED = !TTS_ENABLED;
+  const btn = document.getElementById("ttsToggle");
+  btn.textContent = `VOICE: ${TTS_ENABLED ? "ON" : "OFF"}`;
+  btn.className = TTS_ENABLED ? "" : "ghost";
+  try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch{}
 });
 
 console.log("Script loaded successfully!");
+
+// --- PATCH START (iPad TTS) ---
+let ttsReady = false;
+
+function isiOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+// iOS/Safariで getVoices が空・TTSが無音化するのを回避
+async function initTTS(){
+  if (ttsReady || !('speechSynthesis' in window)) return;
+  await new Promise((resolve)=>{
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;                 // 無音で1回だけ話す＝TTSをウォームアップ
+    u.onend = () => { ttsReady = true; loadVoices(); resolve(); };
+    try { speechSynthesis.speak(u); } catch { resolve(); }
+  });
+}
+// --- PATCH END ---
+
 </script>
 </body>
 </html>
