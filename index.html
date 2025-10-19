@@ -85,6 +85,44 @@ main{flex:1;padding:16px;max-width:1600px;width:100%;margin:0 auto}
 </script>
 <!-- ==== /PWA最小セット ==== -->
 
+<!-- Android向け：単一HTMLでの最小PWA化（オフラインなし） -->
+<meta name="theme-color" content="#0d1117">
+
+<script>
+/* 動的に Web App Manifest を生成して link する */
+(function () {
+  const manifest = {
+    name: "無線観測シミュ｜事案追跡システム",
+    short_name: "事案追跡",
+    start_url: "./?source=pwa",
+    scope: "./",
+    display: "standalone",
+    background_color: "#0d1117",
+    theme_color: "#0d1117",
+    lang: "ja",
+    icons: [
+      {
+        src: "data:image/png;base64,____BASE64_192PX____",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any maskable"
+      },
+      {
+        src: "data:image/png;base64,____BASE64_512PX____",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any maskable"
+      }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: "application/manifest+json" });
+  const link = document.createElement("link");
+  link.rel = "manifest";
+  link.href = URL.createObjectURL(blob);
+  document.head.appendChild(link);
+})();
+</script>
+
 
 </head>
 <body>
