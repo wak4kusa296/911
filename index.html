@@ -3,11 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>無線観測システム｜本部指令センター</title>
+<title>通信指令観測システム</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
+@font-face {
+  font-family: 'DSEG7';
+  src: url('DSEG7ClassicMini-Bold.woff') format('woff');
+}
 :root{
   --bg-primary:#1a1a1a;
   --bg-secondary:#242424;
@@ -23,14 +27,18 @@
   --lv3:#f44336;
   --lv4:#9c27b0;
 }
-*{box-sizing:border-box;margin:0;padding:0}
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+*{box-sizing:border-box}
 body{
   background:var(--bg-primary);
   color:var(--text-primary);
-  font:14px/1.6 'Roboto Mono',monospace;
-  min-height:100vh;
-  display:flex;
-  flex-direction:column;
+  font:14px/1.6 'M PLUS 1p', sans-serif;
+  display: grid;
+  grid-template-rows: auto auto 1fr; /* ヘッダー(auto), 操作パネル(auto), メイン(残り全部) */
 }
 .system-header{
   background:var(--bg-secondary);
@@ -54,25 +62,25 @@ body{
 .system-clock{
   font-size:20px;
   font-weight:700;
-  color:var(--accent-blue);
-  font-family:'Roboto Mono',monospace;
+  color:var(--lv2); /* 色を変更 */
+  font-family:'DSEG7', monospace;
   letter-spacing:0.5px;
 }
-.system-status{
-  display:inline-block;
-  padding:6px 16px;
-  background:var(--bg-tertiary);
-  border:1px solid var(--border);
-  border-radius:4px;
-  font-size:12px;
-  font-weight:500;
-  color:var(--text-secondary);
-  letter-spacing:1px;
+.system-status {
+  display: none;
 }
 .control-panel{
   background:var(--bg-secondary);
   border-bottom:1px solid var(--border);
   padding:12px 24px;
+  transition: all 0.3s ease-in-out; /* トグル時のアニメーション */
+}
+.control-panel.hidden {
+  height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: none;
+  overflow: hidden;
 }
 .control-row{
   display:flex;
@@ -86,7 +94,7 @@ body{
   border:1px solid var(--border);
   border-radius:4px;
   color:var(--text-primary);
-  font:12px/1.4 'Roboto Mono',monospace;
+  font:12px/1.4 'M PLUS 1p', sans-serif;
   font-weight:500;
   cursor:pointer;
   transition:all 0.2s;
@@ -110,17 +118,19 @@ body{
   color:#000;
   font-weight:700;
 }
-.file-input-wrapper{
-  position:relative;
-  overflow:hidden;
-  display:inline-block;
+.location-input{
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font: 12px/1.4 'M PLUS 1p', sans-serif;
+  min-width: 160px;
+  height: 34px;
 }
-.file-input-wrapper input[type=file]{
-  position:absolute;
-  left:-9999px;
-}
-.file-input-wrapper .btn{
-  cursor:pointer;
+.location-input:focus{
+  outline:none;
+  border-color:var(--accent-blue);
 }
 select{
   padding:8px 12px;
@@ -128,29 +138,30 @@ select{
   border:1px solid var(--border);
   border-radius:4px;
   color:var(--text-primary);
-  font:12px/1.4 'Noto Sans JP',sans-serif;
+  font:12px/1.4 'M PLUS 1p', sans-serif;
   cursor:pointer;
   min-width:200px;
 }
 .main-content{
-  flex:1;
   display:grid;
   grid-template-columns:400px 1fr;
   gap:0;
-  height:calc(100vh - 140px);
-  overflow:hidden;
+  overflow: hidden;
 }
 .case-panel{
   background:var(--bg-secondary);
   border-right:2px solid var(--border);
   display:flex;
   flex-direction:column;
-  overflow:hidden;
+  min-height: 0;
 }
 .panel-header{
   padding:16px 20px;
   border-bottom:1px solid var(--border);
   background:var(--bg-tertiary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 .panel-title{
   font-size:13px;
@@ -269,15 +280,15 @@ select{
   color:var(--accent-cyan);
   font-weight:500;
 }
-.case-time{
+.case-time, .msg-time{
   color:var(--text-muted);
-  font-family:'Roboto Mono',monospace;
+  font-family:'M PLUS 1p', sans-serif;
 }
 .radio-panel{
   background:var(--bg-primary);
   display:flex;
   flex-direction:column;
-  overflow:hidden;
+  min-height: 0;
 }
 .radio-log{
   flex:1;
@@ -316,12 +327,6 @@ select{
   gap:10px;
   flex-wrap:wrap;
 }
-.msg-time{
-  font-size:11px;
-  font-weight:500;
-  color:var(--text-muted);
-  font-family:'Roboto Mono',monospace;
-}
 .msg-level{
   padding:4px 8px;
   border-radius:3px;
@@ -337,7 +342,7 @@ select{
   color:var(--text-muted);
 }
 .msg-content{
-  font:13px/1.7 'Noto Sans JP',sans-serif;
+  font:13px/1.7 'M PLUS 1p', sans-serif;
   color:var(--text-primary);
   word-break:break-word;
   padding-top:4px;
@@ -356,36 +361,12 @@ select{
   .main-content{
     grid-template-columns:1fr;
     grid-template-rows:auto 1fr;
-    height:calc(100vh - 180px);
   }
   .case-panel{
     border-right:none;
     border-bottom:2px solid var(--border);
     max-height:35vh;
   }
-  .radio-panel{
-    max-height:65vh;
-  }
-  .header-row{
-    flex-direction:column;
-    align-items:flex-start;
-    gap:8px;
-  }
-}
-
-.location-input{
-  padding: 8px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font: 12px/1.4 'Noto Sans JP', sans-serif;
-  min-width: 160px;
-  height: 34px;
-}
-.location-input:focus{
-  outline:none;
-  border-color:var(--accent-blue);
 }
 </style>
 </head>
@@ -393,16 +374,16 @@ select{
 
 <div class="system-header">
   <div class="header-row">
-    <div class="system-title" id="systemTitle">本部無線観測システム（CSV駆動版）</div>
-    <div class="system-clock" id="jst">--:--:-- JST</div>
+    <div class="system-title" id="systemTitle">通信指令観測システム（CSV駆動版）</div>
+    <div class="system-clock" id="jst">--:--:--.-- JST</div>
     <div class="system-status" id="status">STANDBY</div>
+    <button id="toggleControls" class="btn">操作パネル</button>
   </div>
 </div>
 
-<div class="control-panel">
+<div class="control-panel" id="controlPanel">
   <div class="control-row">
     <input type="text" id="locationInput" class="location-input" value="本部">
-    
     <button id="syncBtn" class="btn primary" disabled>システム起動</button>
     <button id="ttsToggle" class="btn">音声: OFF</button>
     <select id="voiceSel"><option value="">音声自動選択</option></select>
@@ -416,9 +397,9 @@ select{
 
 <div class="main-content">
   <div class="case-panel">
-    <div class="panel-header">
-      <div class="panel-title">進行中の事案</div>
-    </div>
+<div class="panel-header">
+  <div class="panel-title">進行中の事案</div>
+</div>
     <div class="case-list" id="caseList">
       <div class="no-cases">CSVファイルを読み込んでください</div>
     </div>
@@ -750,11 +731,8 @@ class ScenarioEngine {
 
     this.activeCases.set(caseId, caseObj);
     const context = { unit, zone, type_ja: selectedScenario.name };
-    
-    // ▼▼▼【ここからが変更点】▼▼▼
     let message = this.parser.parse(firstNode.message, context, this.seed + n);
     message = message.replace(/本部/g, locationName);
-    // ▲▲▲【ここまでが変更点】▲▲▲
     
     return {
       id: `N${String(n).padStart(6, '0')}`, caseId, level: selectedScenario.level,
@@ -811,10 +789,8 @@ class ScenarioEngine {
       backup_unit: backupUnit
     };
     
-    // ▼▼▼【ここからが変更点】▼▼▼
     let message = this.parser.parse(nextNode.message, context, this.seed + n);
     message = message.replace(/本部/g, locationName);
-    // ▲▲▲【ここまでが変更点】▲▲▲
 
     return {
       id: `N${String(n).padStart(6, '0')}`, caseId, level: caseObj.level,
@@ -830,6 +806,53 @@ class ScenarioEngine {
   getVisibleCases() {
       return this.getAllActiveCases().filter(c => c.isVisible);
   }
+}
+
+// ==========================================
+// UI更新
+// ==========================================
+function updateCaseStatus() {
+  const el = document.getElementById("caseList");
+  if (!scenarioEngine) {
+    el.innerHTML = '<div class="no-cases">CSVファイルを読み込んでください</div>';
+    return;
+  }
+  
+  const active = scenarioEngine.getVisibleCases();
+  if (active.length === 0) {
+    el.innerHTML = '<div class="no-cases">現在、進行中の事案はありません</div>';
+    return;
+  }
+
+  active.sort((a, b) => b.level - a.level);
+  el.innerHTML = active.map(c => {
+    const t = Math.floor((Date.now() - c.startTime) / 1000);
+    const m = Math.floor(t / 60), s = t % 60;
+    const allUnits = [c.unit, ...c.backupUnits];
+    const unitsStr = allUnits.slice(0, 2).join('・ ') + (allUnits.length > 2 ? ` 他${allUnits.length - 2}台` : '');
+    const levelClass = `lv${c.level}`;
+    const phaseMap = {
+      dispatch: '出動指令', enroute: '現場向け', on_scene: '現場対応中',
+      backup: '応援要請', backup_response: '応援出動', escalate: 'エスカレート',
+      escape: '逃走追跡', arrest: '容疑者確保', negotiation: '交渉中',
+      assault: '強行突入', special_request: '特殊部隊要請', clear: '処理完了'
+    };
+    return `<div class="case-card">
+      <div class="case-header">
+        <span class="level-badge ${levelClass}">LV${c.level}</span>
+        <span class="case-id">${c.id}</span>
+        <span class="case-type">${c.scenario.name}</span>
+      </div>
+      <div class="case-body">
+        <div class="case-info-row"><span class="info-label">地区:</span><span class="info-value">${c.zone}</span></div>
+        <div class="case-info-row"><span class="info-label">状態:</span><span class="info-value">${phaseMap[c.phase] || c.phase}</span></div>
+      </div>
+      <div class="case-footer">
+        <span class="case-units">${unitsStr}</span>
+        <span class="case-time">${m}:${String(s).padStart(2, '0')}</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ==========================================
@@ -916,58 +939,12 @@ function stopTimeSignal() {
   function pad(n, len = 2) { return String(n).padStart(len, "0"); }
   function tick() {
     const now = new Date();
-    el.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} JST`;
+    const ms = String(now.getMilliseconds()).padStart(3, '0');
+    el.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${ms}`;
   }
   tick();
-  setInterval(tick, 1000);
+  setInterval(tick, 50); // 更新間隔を短縮してミリ秒を表示
 })();
-// ==========================================
-// UI更新
-// ==========================================
-
-function updateCaseStatus() {
-  const el = document.getElementById("caseList");
-  if (!scenarioEngine) {
-    el.innerHTML = '<div class="no-cases">CSVファイルを読み込んでください</div>';
-    return;
-  }
-  
-  const active = scenarioEngine.getVisibleCases();
-  if (active.length === 0) {
-    el.innerHTML = '<div class="no-cases">現在、進行中の事案はありません</div>';
-    return;
-  }
-
-  active.sort((a, b) => b.level - a.level);
-  el.innerHTML = active.map(c => {
-    const t = Math.floor((Date.now() - c.startTime) / 1000);
-    const m = Math.floor(t / 60), s = t % 60;
-    const allUnits = [c.unit, ...c.backupUnits];
-    const unitsStr = allUnits.slice(0, 2).join(', ') + (allUnits.length > 2 ? ` 他${allUnits.length - 2}台` : '');
-    const levelClass = `lv${c.level}`;
-    const phaseMap = {
-      dispatch: '出動指令', enroute: '現場向け', on_scene: '現場対応中',
-      backup: '応援要請', backup_response: '応援出動', escalate: 'エスカレート',
-      escape: '逃走追跡', arrest: '容疑者確保', negotiation: '交渉中',
-      assault: '強行突入', special_request: '特殊部隊要請', clear: '処理完了'
-    };
-    return `<div class="case-card">
-      <div class="case-header">
-        <span class="level-badge ${levelClass}">LV${c.level}</span>
-        <span class="case-id">${c.id}</span>
-        <span class="case-type">${c.scenario.name}</span>
-      </div>
-      <div class="case-body">
-        <div class="case-info-row"><span class="info-label">地区:</span><span class="info-value">${c.zone}</span></div>
-        <div class="case-info-row"><span class="info-label">状態:</span><span class="info-value">${phaseMap[c.phase] || c.phase}</span></div>
-      </div>
-      <div class="case-footer">
-        <span class="case-units">${unitsStr}</span>
-        <span class="case-time">${m}:${String(s).padStart(2, '0')}</span>
-      </div>
-    </div>`;
-  }).join('');
-}
 
 // ==========================================
 // 自動スクロール制御
@@ -1125,13 +1102,9 @@ async function runSystem() {
         if (my !== runningToken) { clearInterval(caseInterval); return; }
 
         const caseObj = scenarioEngine.activeCases.get(event.caseId);
-        
-        // ▼▼▼【ここが変更点】▼▼▼
-        // 条件を 'enroute' から 'dispatch' に変更
         if (caseObj && event.phase === 'dispatch' && !caseObj.isVisible) {
           caseObj.isVisible = true;
         }
-        // ▲▲▲【ここまでが変更点】▲▲▲
 
         const row = document.createElement("div");
         row.className = "radio-message";
@@ -1206,21 +1179,17 @@ function initializeSystem(csvText) {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  // 拠点名入力のイベントリスナーを設定
   const locationInput = document.getElementById("locationInput");
   const systemTitle = document.getElementById("systemTitle");
-
-  // 入力があった場合に、変数とタイトルを更新
+  
   locationInput.addEventListener('input', (e) => {
     const newName = e.target.value.trim();
-    locationName = newName || "本部"; // 空の場合は「本部」とする
-    systemTitle.textContent = `${locationName}本部無線観測システム（CSV駆動版）`;
+    locationName = newName || "本部";
+    systemTitle.textContent = `${locationName}通信指令観測システム（CSV駆動版）`;
   });
   
-  // 初期化
-  systemTitle.textContent = `${locationInput.value.trim()}本部無線観測システム（CSV駆動版）`;
+  systemTitle.textContent = `${locationInput.value.trim()}通信指令観測システム（CSV駆動版）`;
 
-  // scenario.csvの自動読み込み
   try {
     const response = await fetch('scenario.csv');
     if (response.ok) {
@@ -1232,9 +1201,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   } catch (fetchError) {
     document.getElementById("caseList").innerHTML = '<div class="no-cases">❌ scenario.csvの読込に失敗しました。</div>';
   }
-});
 
-// 手動でのCSVロード機能は削除
+  // ▼▼▼ 操作パネルのトグル機能を追加 ▼▼▼
+  document.getElementById("toggleControls").addEventListener("click", () => {
+    const controlPanel = document.getElementById("controlPanel");
+    controlPanel.classList.toggle("hidden");
+  });
+});
 
 document.getElementById("syncBtn").addEventListener("click", () => {
   if (TTS_ENABLED) {
