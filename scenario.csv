@@ -19,6 +19,7 @@ PARAM,units_backup,,,,,中央201;中央202;中央203;中央204;中央205;中央2
 # ==========================================
 
 LEVEL,Lv1,,,,,
+# ▼▼▼ ここの new_case,0.15 を new_case,0 に変更 ▼▼▼
   NAME,交通違反取締,,,,,type=traffic_violation;level=1
     NODE,1,new_case,0.35,dispatch,本部から{unit}、{zone}、{type_ja}の110番通報。至急現場へ転進せよ。,
       NODE,2,awaiting_response,1.0,enroute,{unit}から本部、了解。{zone}方向へ移動中。到着予定{#eta:2-8}分。,

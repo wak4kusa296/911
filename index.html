@@ -677,9 +677,11 @@ class ScenarioEngine {
     return candidates[0];
   }
 
-  generateNewCase(n, busyUnits) {
+generateNewCase(n, busyUnits) {
     const allScenarios = this.loader.scenarios.flatMap(level => level.scenarios);
     const totalWeight = allScenarios.reduce((sum, s) => sum + s.probability, 0);
+    if (totalWeight <= 0) return null;
+    
     const r = this.parser.rand01(this.seed, 'scenario', n) * totalWeight;
     let cumulative = 0;
     let selectedScenario = allScenarios[0];
@@ -732,17 +734,23 @@ class ScenarioEngine {
     this.activeCases.set(caseId, caseObj);
     const context = { unit, zone, type_ja: selectedScenario.name };
     let message = this.parser.parse(firstNode.message, context, this.seed + n);
-    message = message.replace(/本部/g, locationName);
+    message = message.replace(/東京/g, locationName);
     
     return {
       id: `N${String(n).padStart(6, '0')}`, caseId, level: selectedScenario.level,
       phase: firstNode.phase, zone, unit, message, scenarioName: selectedScenario.name
     };
   }
-
-  progressCase(caseId, n, busyUnits) {
+progressCase(caseId, n, busyUnits) {
     const caseObj = this.activeCases.get(caseId);
     if (!caseObj) return null;
+
+    // ▼▼▼【ここからが変更点】▼▼▼
+    // 削除タイマーが既にセットされている場合は、何もしない
+    if (caseObj.isDeleting) {
+      return null;
+    }
+    // ▲▲▲【ここまでが変更点】▲▲▲
 
     const availableBackupUnits = (this.unitTypes.backup || []).filter(u => !busyUnits.has(u));
     const caseState = {
@@ -753,21 +761,27 @@ class ScenarioEngine {
 
     const nextNode = this.selectNextNode(caseObj.currentNode, caseState);
 
+    // ▼▼▼【ここからが変更点】▼▼▼
+    // 次のノードがない場合、事案を消さずにそのまま残す
     if (!nextNode) {
       if (caseObj.awaitingResponse) {
         caseObj.awaitingResponse = false;
-        return null; 
-      }
-      if (caseObj.phase !== 'clear') {
-        caseObj.phase = 'clear';
-        setTimeout(() => this.activeCases.delete(caseId), 5000);
       }
       return null;
     }
+    // ▲▲▲【ここまでが変更点】▲▲▲
 
     caseObj.currentNode = nextNode;
     caseObj.phase = nextNode.phase;
     caseObj.awaitingResponse = (nextNode.condition === 'awaiting_response');
+
+    // ▼▼▼【ここからが変更点】▼▼▼
+    // clearフェーズに達した時に、一度だけ削除タイマーをセットする
+    if (caseObj.phase === 'clear' && !caseObj.isDeleting) {
+      caseObj.isDeleting = true; // 削除処理中フラグを立てる
+      setTimeout(() => this.activeCases.delete(caseId), 5000);
+    }
+    // ▲▲▲【ここまでが変更点】▲▲▲
 
     if (nextNode.params && nextNode.params.add_units) {
         const newUnits = nextNode.params.add_units.split(';');
@@ -783,14 +797,16 @@ class ScenarioEngine {
       backupUnit = availableBackupUnits[0];
       caseObj.backupUnits.push(backupUnit);
     }
+    
+    const latestBackupUnit = caseObj.backupUnits.length > 0 ? caseObj.backupUnits[caseObj.backupUnits.length - 1] : null;
 
     const context = {
       unit: caseObj.unit, zone: caseObj.zone, type_ja: caseObj.scenario.name,
-      backup_unit: backupUnit
+      backup_unit: backupUnit || latestBackupUnit
     };
     
     let message = this.parser.parse(nextNode.message, context, this.seed + n);
-    message = message.replace(/本部/g, locationName);
+    message = message.replace(/東京/g, locationName);
 
     return {
       id: `N${String(n).padStart(6, '0')}`, caseId, level: caseObj.level,
@@ -910,22 +926,36 @@ function toneNTT(kind) {
 }
 
 function startTimeSignal() {
-  if (tickTimer) clearInterval(tickTimer);
+  if (tickTimer) clearTimeout(tickTimer); // clearIntervalから変更
   if (!TTS_ENABLED) return;
   
   ensureAudio();
-  tickTimer = setInterval(() => {
-    if (!TTS_ENABLED) return;
+
+  const tick = () => {
+    // 待機中に音声がオフにされた場合、タイマーを停止
+    if (!TTS_ENABLED) { 
+      tickTimer = null;
+      return;
+    }
+
     const s = new Date().getSeconds();
-    if (s % 10 === 0) { toneNTT('peen'); return; }
-    if (s === 57 || s === 58 || s === 59) { toneNTT('pop'); return; }
-    toneNTT('pip');
-  }, 1000);
+    if (s % 10 === 0) { toneNTT('peen'); }
+    else if (s >= 57) { toneNTT('pop'); }
+    else { toneNTT('pip'); }
+    
+    // 次の秒の切り替わりまでの時間を計算して、次のタイマーをセット
+    const delay = 1000 - new Date().getMilliseconds();
+    tickTimer = setTimeout(tick, delay);
+  };
+
+  // 最初の1回は、次の秒の切り替わりジャストに実行するよう予約
+  const firstDelay = 1000 - new Date().getMilliseconds();
+  tickTimer = setTimeout(tick, firstDelay);
 }
 
 function stopTimeSignal() {
   if (tickTimer) {
-    clearInterval(tickTimer);
+    clearTimeout(tickTimer); // clearIntervalから変更
     tickTimer = null;
   }
 }
@@ -1052,6 +1082,7 @@ async function runSystem() {
   status.textContent = "ACTIVE";
 
   let n = 0;
+  let lastDiagnosisTime = Date.now();
 
   const caseInterval = setInterval(() => {
     if (my !== runningToken) { clearInterval(caseInterval); return; }
@@ -1069,8 +1100,33 @@ async function runSystem() {
         caseObj.backupUnits.forEach(u => busyUnits.add(u));
     }
 
-    const activeCount = scenarioEngine.getVisibleCases().length;
+    let activeCount = scenarioEngine.getVisibleCases().length;
 
+    // 1分経過チェック
+    const now = Date.now();
+    if (now - lastDiagnosisTime > 60000) {
+      lastDiagnosisTime = now;
+      if (activeCount === 0) {
+        // ▼▼▼【ここからが変更点】▼▼▼
+        // 事案が0件ならランダムな事案を発生させる（自己診断）
+        const newEvent = scenarioEngine.generateNewCase(n, busyUnits);
+        if (newEvent) {
+          eventsToProcess.push(newEvent);
+          const newCaseId = newEvent.caseId;
+          const newCase = scenarioEngine.activeCases.get(newCaseId);
+          if (newCase) {
+            busyUnits.add(newCase.unit);
+          }
+          const responseEvent = scenarioEngine.progressCase(newCaseId, n + 0.1, busyUnits);
+          if (responseEvent) {
+            eventsToProcess.push(responseEvent);
+          }
+        }
+        // ▲▲▲【ここまでが変更点】▲▲▲
+      }
+    }
+
+    activeCount = scenarioEngine.getVisibleCases().length;
     const caseIds = Array.from(scenarioEngine.activeCases.keys());
     for (const caseId of caseIds) {
       const event = scenarioEngine.progressCase(caseId, n, busyUnits);
@@ -1114,8 +1170,8 @@ async function runSystem() {
 
         const ts = document.createElement("div");
         ts.className = "msg-time";
-        const now = new Date();
-        ts.textContent = now.toLocaleTimeString("ja-JP", { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const ts_now = new Date();
+        ts.textContent = ts_now.toLocaleTimeString("ja-JP", { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
         const ch = document.createElement("div");
         ch.className = `msg-level lv${event.level}`;
