@@ -3,85 +3,542 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>無線観測シミュ｜事案追跡システム</title>
+<title>無線観測システム｜東京本部指令センター</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0d1117;--panel:#161b22;--ink:#c9d1d9;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--red:#f85149;--green:#3fb950;--ops:#d29922}
+:root{
+  --bg-primary:#1a1a1a;
+  --bg-secondary:#242424;
+  --bg-tertiary:#2e2e2e;
+  --border:#3a3a3a;
+  --text-primary:#e0e0e0;
+  --text-secondary:#a0a0a0;
+  --text-muted:#707070;
+  --accent-blue:#e0e0e0;
+  --accent-cyan:#e0e0e0;
+  --lv1:#4caf50;
+  --lv2:#ff9800;
+  --lv3:#f44336;
+  --lv4:#9c27b0;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--ink);font:13px/1.5 'Roboto Mono',monospace;min-height:100vh;display:flex;flex-direction:column;text-transform:uppercase;letter-spacing:0.5px}
-header{position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 20px}
-.header-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
-.clock{font-weight:700;font-size:16px;color:var(--accent)}
-.status-pill{border:1px solid var(--line);padding:4px 12px;color:var(--muted);font-size:11px;background:rgba(0,0,0,0.3)}
-.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-button{border:1px solid var(--line);background:rgba(88,166,255,0.1);color:var(--accent);padding:8px 16px;cursor:pointer;font-weight:600;font-size:11px;font-family:inherit;letter-spacing:1px;transition:all 0.2s}
-button:hover{background:rgba(88,166,255,0.2);border-color:var(--accent)}
-button.ghost{background:rgba(0,0,0,0.3);color:var(--muted)}
-button.ghost:hover{background:rgba(0,0,0,0.4);color:var(--ink)}
-select{border:1px solid var(--line);background:rgba(0,0,0,0.3);color:var(--ink);padding:8px 12px;font-size:11px;font-family:'Noto Sans JP',sans-serif;cursor:pointer;min-width:220px;text-transform:none}
-.rate-control{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px;padding:6px 12px;border:1px solid var(--line);background:rgba(0,0,0,0.3)}
-.rate-control input[type="range"]{-webkit-appearance:none;width:120px;height:4px;background:var(--line);outline:none}
-.rate-control input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--accent);cursor:pointer}
-.rate-control span{color:var(--accent);font-weight:700;min-width:40px}
-main{flex:1;padding:16px;max-width:1600px;width:100%;margin:0 auto}
-#caseStatus{border:1px solid var(--line);background:rgba(0,0,0,0.3);padding:12px;margin-bottom:12px;max-height:150px;overflow:auto}
-#caseStatus h3{font-size:11px;color:var(--accent);margin-bottom:8px}
-.case-item{display:grid;grid-template-columns:60px 50px 100px 80px 1fr;gap:8px;padding:4px 8px;font-size:10px;border-bottom:1px solid var(--line)}
-.case-item:last-child{border-bottom:none}
-.case-id{color:var(--accent);font-weight:700}
-.case-unit{color:var(--ink)}
-.case-phase{color:var(--muted)}
-.case-zone{color:var(--ops)}
-.case-time{color:var(--muted);text-align:right}
-#log{border:1px solid var(--line);min-height:calc(100vh - 350px);max-height:calc(100vh - 350px);overflow:auto;padding:8px;background:#010409}
-.row{padding:8px 10px;display:grid;grid-template-columns:90px 50px 70px 1fr;gap:10px;align-items:start;margin-bottom:2px;border-left:2px solid transparent}
-.row:hover{background:rgba(88,166,255,0.03);border-left-color:var(--accent)}
-.ts{color:var(--muted);font-size:11px;font-weight:700}
-.ch{padding:3px 10px;font-weight:700;font-size:10px;border:1px solid rgba(0,0,0,0.5)}
-.ch.RED{background:var(--red);color:#fff}
-.ch.GREEN{background:var(--green);color:#000}
-.ch.OPS{background:var(--ops);color:#000}
-.case-tag{color:var(--accent);font-size:10px;font-weight:700}
-.msg{white-space:pre-wrap;line-height:1.6;font-size:13px;font-family:'Noto Sans JP',sans-serif;text-transform:none}
+body{
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  font:14px/1.6 'Roboto Mono',monospace;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+}
+
+/* ヘッダー */
+.system-header{
+  background:var(--bg-secondary);
+  border-bottom:2px solid var(--border);
+  padding:16px 24px;
+}
+.header-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:20px;
+}
+.system-title{
+  font-size:18px;
+  font-weight:700;
+  color:var(--accent-cyan);
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.system-clock{
+  font-size:20px;
+  font-weight:700;
+  color:var(--accent-blue);
+  font-family:'Roboto Mono',monospace;
+  letter-spacing:0.5px;
+}
+.system-status{
+  display:inline-block;
+  padding:6px 16px;
+  background:var(--bg-tertiary);
+  border:1px solid var(--border);
+  border-radius:4px;
+  font-size:12px;
+  font-weight:500;
+  color:var(--text-secondary);
+  letter-spacing:1px;
+}
+
+/* コントロールパネル */
+.control-panel{
+  background:var(--bg-secondary);
+  border-bottom:1px solid var(--border);
+  padding:12px 24px;
+}
+.control-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.btn{
+  padding:8px 20px;
+  background:var(--bg-tertiary);
+  border:1px solid var(--border);
+  border-radius:4px;
+  color:var(--text-primary);
+  font:12px/1.4 'Roboto Mono',monospace;
+  font-weight:500;
+  cursor:pointer;
+  transition:all 0.2s;
+  letter-spacing:0.5px;
+  text-transform:uppercase;
+}
+.btn:hover{
+  background:var(--bg-primary);
+  border-color:var(--accent-blue);
+  color:var(--accent-blue);
+}
+.btn.primary{
+  background:var(--accent-blue);
+  border-color:var(--accent-blue);
+  color:#000;
+  font-weight:700;
+}
+.btn.primary:hover{
+  background:var(--accent-cyan);
+  border-color:var(--accent-cyan);
+}
+.btn.active{
+  background:var(--accent-cyan);
+  border-color:var(--accent-cyan);
+  color:#000;
+  font-weight:700;
+}
+select{
+  padding:8px 12px;
+  background:var(--bg-tertiary);
+  border:1px solid var(--border);
+  border-radius:4px;
+  color:var(--text-primary);
+  font:12px/1.4 'Noto Sans JP',sans-serif;
+  cursor:pointer;
+  min-width:200px;
+}
+.rate-slider{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 16px;
+  background:var(--bg-tertiary);
+  border:1px solid var(--border);
+  border-radius:4px;
+}
+.rate-slider label{
+  font-size:11px;
+  color:var(--text-muted);
+  letter-spacing:0.5px;
+}
+.rate-slider input[type="range"]{
+  -webkit-appearance:none;
+  width:100px;
+  height:4px;
+  background:var(--border);
+  outline:none;
+  border-radius:2px;
+}
+.rate-slider input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:16px;
+  height:16px;
+  background:var(--accent-blue);
+  border-radius:50%;
+  cursor:pointer;
+}
+.rate-slider .value{
+  font-weight:700;
+  color:var(--accent-blue);
+  min-width:35px;
+  text-align:right;
+}
+
+/* メインコンテンツ */
+/* メインコンテンツの高さ固定 */
+/* メインコンテンツのレスポンシブ対応 */
+.main-content{
+  flex:1;
+  display:grid;
+  grid-template-columns:400px 1fr;
+  gap:0;
+  height:calc(100vh - 140px);
+  overflow:hidden;
+  max-height:calc(100vh - 140px);
+}
+
+/* 縦画面（モバイル）対応 */
+@media (max-width: 768px) {
+  .main-content{
+    grid-template-columns:1fr;
+    grid-template-rows:auto 1fr;
+    height:calc(100vh - 180px); /* ヘッダーが折り返す分を考慮 */
+  }
+  
+  .case-panel{
+    border-right:none;
+    border-bottom:2px solid var(--border);
+    max-height:35vh; /* 事案リストは画面の35%まで */
+    min-height:150px;
+  }
+  
+  .radio-panel{
+    max-height:65vh; /* 無線ログは画面の65% */
+  }
+  
+  /* ヘッダーを縦に並べる */
+  .header-row{
+    flex-direction:column;
+    align-items:flex-start;
+    gap:8px;
+  }
+  
+  .system-title{
+    font-size:16px;
+  }
+  
+  .system-clock{
+    font-size:18px;
+  }
+  
+  /* コントロールパネルを縦に並べる */
+  .control-row{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  
+  .btn, select, .rate-slider{
+    width:100%;
+  }
+  
+  /* 事案カードを小さく */
+  .case-card{
+    padding:12px 16px;
+  }
+  
+  .case-header{
+    font-size:12px;
+  }
+  
+  .case-body{
+    font-size:10px;
+  }
+  
+  /* 無線ログを小さく */
+  .radio-message{
+    padding:10px 12px;
+    margin-bottom:6px;
+  }
+  
+  .msg-time{
+    font-size:10px;
+  }
+  
+  .msg-level{
+    font-size:10px;
+    padding:3px 6px;
+  }
+  
+  .msg-case{
+    font-size:10px;
+  }
+  
+  .msg-content{
+    font-size:12px;
+    line-height:1.6;
+  }
+}
+
+/* さらに小さい画面用 */
+@media (max-width: 480px) {
+  .system-title{
+    font-size:14px;
+  }
+  
+  .system-clock{
+    font-size:16px;
+  }
+  
+  .main-content{
+    height:calc(100vh - 200px);
+  }
+  
+  .case-panel{
+    max-height:30vh;
+    min-height:120px;
+  }
+  
+  .radio-panel{
+    max-height:70vh;
+  }
+}
+
+/* 無線パネルの高さ固定 */
+.radio-panel{
+  background:var(--bg-primary);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  height:100%;  /* 追加 */
+  max-height:100%;  /* 追加 */
+}
+
+/* 無線ログのスクロール */
+.radio-log{
+  flex:1;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:12px;
+  height:100%;  /* 追加 */
+}
+
+/* 事案リスト */
+.case-panel{
+  background:var(--bg-secondary);
+  border-right:2px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.panel-header{
+  padding:16px 20px;
+  border-bottom:1px solid var(--border);
+  background:var(--bg-tertiary);
+}
+.panel-title{
+  font-size:13px;
+  font-weight:700;
+  color:var(--accent-cyan);
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.case-list{
+  flex:1;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.case-card{
+  padding:16px 20px;
+  border-bottom:1px solid var(--border);
+  transition:background 0.2s;
+}
+.case-card:hover{
+  background:var(--bg-tertiary);
+}
+.case-header{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:8px;
+}
+.level-badge{
+  padding:4px 10px;
+  border-radius:3px;
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:0.5px;
+}
+.level-badge.lv1{background:var(--lv1);color:#000}
+.level-badge.lv2{background:var(--lv2);color:#000}
+.level-badge.lv3{background:var(--lv3);color:#fff}
+.level-badge.lv4{background:var(--lv4);color:#fff}
+.escalate-icon{
+  font-size:14px;
+  font-weight:700;
+  color:var(--lv3);
+}
+.case-id{
+  font-size:13px;
+  font-weight:700;
+  color:var(--accent-blue);
+}
+.case-type{
+  font-size:12px;
+  color:var(--text-primary);
+  margin-left:auto;
+}
+.case-body{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  font-size:11px;
+  color:var(--text-secondary);
+}
+.case-info-row{
+  display:flex;
+  gap:6px;
+}
+.info-label{
+  color:var(--text-muted);
+}
+.info-value{
+  color:var(--text-secondary);
+  font-weight:500;
+}
+.case-footer{
+  margin-top:8px;
+  padding-top:8px;
+  border-top:1px solid var(--border);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  font-size:11px;
+}
+.case-units{
+  color:var(--accent-cyan);
+  font-weight:500;
+}
+.case-time{
+  color:var(--text-muted);
+  font-family:'Roboto Mono',monospace;
+}
+
+/* 無線ログ */
+.radio-panel{
+  background:var(--bg-primary);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.radio-log{
+  flex:1;
+  overflow-y:auto;
+  padding:12px;
+}
+.radio-message{
+  display:grid;
+  grid-template-columns:120px 60px 80px 1fr;  /* タイムスタンプ幅を広げる */
+  gap:12px;
+  padding:12px 16px;
+  margin-bottom:8px;
+  background:var(--bg-secondary);
+  border-left:3px solid transparent;
+  border-radius:4px;
+  transition:all 0.2s;
+}
+.radio-message:hover{
+  background:var(--bg-tertiary);
+  border-left-color:#808080;  /* グレーに変更 */
+}
+.msg-time{
+  font-size:11px;  /* 少し小さく */
+  font-weight:500;
+  color:var(--text-muted);
+  font-family:'Roboto Mono',monospace;
+}
+/* 無線ログのレイアウトを縦並びに変更 */
+.radio-message{
+  display:flex;
+  flex-direction:column;  /* 縦並びに変更 */
+  gap:6px;  /* 要素間の間隔 */
+  padding:12px 16px;
+  margin-bottom:8px;
+  background:var(--bg-secondary);
+  border-left:3px solid transparent;
+  border-radius:4px;
+  transition:all 0.2s;
+}
+
+/* メタ情報行（時刻・レベル・事案ID）を横並びに */
+.radio-message-meta{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.msg-time{
+  font-size:11px;
+  font-weight:500;
+  color:var(--text-muted);
+  font-family:'Roboto Mono',monospace;
+}
+
+.msg-level{
+  padding:4px 8px;
+  border-radius:3px;
+  font-size:11px;
+  font-weight:700;
+  text-align:center;
+  letter-spacing:0.5px;
+  color: var(--text-muted);
+}
+
+.msg-case{
+  font-size:11px;
+  font-weight:700;
+  color:var(--text-muted);
+}
+
+.msg-content{
+  font:13px/1.7 'Noto Sans JP',sans-serif;
+  color:var(--text-primary);
+  word-break:break-word;
+  padding-top:4px;  /* 本文の上に少し余白 */
+}
+
+.no-cases{
+  padding:40px 20px;
+  text-align:center;
+  color:var(--text-muted);
+  font-size:12px;
+}
+
+/* スクロールバー */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:var(--bg-primary)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted)}
 </style>
-
-<!-- head 内：PWAメタ -->
-<link rel="manifest" href="./manifest.webmanifest">
-<meta name="theme-color" content="#0d1117">
-
-<!-- iOSでホーム追加したとき用（任意） -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="./icons/maskable-192.png">
-
+<meta name="theme-color" content="#1a1a1a">
 </head>
 <body>
 
-<header>
-<div class="header-top">
-<div class="clock" id="jst">--:--:--.--- JST</div>
-<div class="status-pill" id="status">STANDBY</div>
+<div class="system-header">
+  <div class="header-row">
+    <div class="system-title">東京本部無線観測システム</div>
+    <div class="system-clock" id="jst">--:--:-- JST</div>
+    <div class="system-status" id="status">STANDBY</div>
+  </div>
 </div>
-<div class="controls">
-<button id="syncBtn">INITIATE SYNC</button>
-<button id="ttsToggle" class="ghost">VOICE: OFF</button>
-<select id="voiceSel"><option value="">Auto Select</option></select>
-<label class="rate-control">
-RATE: <input type="range" id="rateSlider" min="0.5" max="2.0" step="0.1" value="1.5">
-<span id="rateValue">1.5</span>X
-</label>
-</div>
-</header>
 
-<main>
-<div id="caseStatus">
-<h3>ACTIVE CASES</h3>
-<div id="caseList">NO ACTIVE CASES</div>
+<div class="control-panel">
+  <div class="control-row">
+    <button id="syncBtn" class="btn primary">システム起動</button>
+    <button id="ttsToggle" class="btn">音声: OFF</button>
+    <select id="voiceSel"><option value="">音声自動選択</option></select>
+    <div class="rate-slider">
+      <label>速度:</label>
+      <input type="range" id="rateSlider" min="0.5" max="2.0" step="0.1" value="1.5">
+      <span class="value" id="rateValue">1.5</span>X
+    </div>
+  </div>
 </div>
-<div id="log"></div>
-</main>
+
+<div class="main-content">
+  <div class="case-panel">
+    <div class="panel-header">
+      <div class="panel-title">進行中の事案</div>
+    </div>
+    <div class="case-list" id="caseList">
+      <div class="no-cases">現在、進行中の事案はありません</div>
+    </div>
+  </div>
+
+  <div class="radio-panel">
+    <div class="radio-log" id="log"></div>
+  </div>
+</div>
 
 <script>
 // グローバル変数
@@ -102,33 +559,58 @@ const lastTexts=[];
 
 // 事案クラス
 class Case{
-  constructor(id,type,zone,unit,startTime){
+  constructor(id,typeKey,typeObj,zone,unit,startTime){
     this.id=id;
-    this.type=type;
+    this.typeKey=typeKey;
+    this.typeObj=typeObj;
     this.zone=zone;
     this.units=[unit];
     this.startTime=startTime;
     this.phase='dispatch';
     this.needsBackup=false;
-    this.awaitingResponse=true; // 応答待ちフラグ
+    this.hasEscaped=false;
+    this.hasEmergency=false;
+    this.hasSpecial=false;
+    this.hasArrested=false;
+    this.awaitingResponse=true;
+    this.currentLevel=typeObj.level;
   }
   advancePhase(newPhase){
     this.phase=newPhase;
-    if(newPhase!=='dispatch'&&newPhase!=='backup_response'){
+    if(newPhase!=='dispatch'&&newPhase!=='backup_response'&&newPhase!=='special_request'){
       this.awaitingResponse=false;
     }
   }
   addUnit(unit){
     if(!this.units.includes(unit)){
       this.units.push(unit);
-      this.awaitingResponse=true; // 新しいユニットの応答待ち
+      this.awaitingResponse=true;
     }
+  }
+  escalateLevel(){
+    if(this.currentLevel<4){
+      this.currentLevel++;
+      return true;
+    }
+    return false;
   }
   getElapsedTime(){return Math.floor((Date.now()-this.startTime)/1000);}
   getStatus(){
-    const map={dispatch:'出動指令',enroute:'現場向け',on_scene:'現場対応中',backup:'応援要請',clear:'処理完了'};
+    const map={
+      dispatch:'出動指令',
+      enroute:'現場向け',
+      on_scene:'現場対応中',
+      backup:'応援要請',
+      emergency_deploy:'緊急配備',
+      escape:'逃走追跡中',
+      special_request:'特殊班要請',
+      mass_backup:'大規模応援',
+      arrest:'容疑者確保',
+      clear:'処理完了'
+    };
     return map[this.phase]||this.phase;
   }
+  getLevel(){return this.currentLevel;}
 }
 
 // ユーティリティ
@@ -138,71 +620,137 @@ const rand01=(seed,...k)=>mulberry32(strHash32([seed,...k].join("|")))();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function qms(ms,q=10){return Math.max(q,Math.round(ms/q)*q);}
 
-// データ
+// データ - レベル別に再編成
 const TYPES=[
-  {key:"traffic_accident",ja:"交通事故",ch:"RED",unitType:"traffic"},
-  {key:"theft",ja:"窃盗事件",ch:"RED",unitType:"investigation"},
-  {key:"suspicious",ja:"不審車両",ch:"OPS",unitType:"patrol"},
-  {key:"traffic_violation",ja:"交通違反",ch:"GREEN",unitType:"traffic"}
+  // レベル1（緑）: 日常業務
+  {key:"traffic_violation",ja:"交通違反",level:1,unitType:"traffic",weight:0.35},
+  {key:"parking_violation",ja:"駐車違反",level:1,unitType:"traffic",weight:0.25},
+  {key:"patrol_check",ja:"巡回警戒",level:1,unitType:"patrol",weight:0.20},
+  
+  // レベル2（黄）: 通常事案
+  {key:"traffic_accident",ja:"交通事故",level:2,unitType:"traffic",weight:0.20},
+  {key:"suspicious",ja:"不審車両",level:2,unitType:"patrol",weight:0.18},
+  {key:"theft",ja:"窃盗事件",level:2,unitType:"investigation",weight:0.15},
+  {key:"dispute",ja:"口論通報",level:2,unitType:"patrol",weight:0.12},
+  
+  // レベル3（赤）: 重大事案
+  {key:"robbery",ja:"強盗事件",level:3,unitType:"investigation",weight:0.08,needsEmergency:true},
+  {key:"hit_and_run",ja:"ひき逃げ",level:3,unitType:"traffic",weight:0.07,canEscalate:true},
+  {key:"assault",ja:"傷害事件",level:3,unitType:"investigation",weight:0.06},
+  
+  // レベル4（特殊）: 特殊事案
+  {key:"suspicious_object",ja:"不審物発見",level:4,unitType:"investigation",weight:0.02,needsSpecial:"爆発物処理班"},
+  {key:"hostage",ja:"人質立てこもり",level:4,unitType:"investigation",weight:0.01,needsSpecial:"SAT"},
+  {key:"mass_incident",ja:"多数傷病者",level:4,unitType:"patrol",weight:0.01,needsSpecial:"救急隊"}
 ];
-const ZONES=["1丁目","2丁目","3丁目","みなと通り","幹線12号","湾岸23号"];
+
+const LEVEL_NAMES={
+  1:{code:"LV1",color:"GREEN",bg:"var(--green)"},
+  2:{code:"LV2",color:"YELLOW",bg:"#d29922"},
+  3:{code:"LV3",color:"RED",bg:"var(--red)"},
+  4:{code:"SPEC",color:"PURPLE",bg:"#a371f7"}
+};
+
+const ZONES=["1丁目","2丁目","3丁目","みなと通り","幹線12号","湾岸23号","中央公園","駅前広場","商業地区"];
 
 // ユニットタイプ別の番号
 const UNIT_TYPES={
-  investigation:["捜査301","捜査302","捜査303"], // 事件
-  traffic:["交機201","交機202","交機203","交機204"], // 事故・交通違反
-  patrol:["遊撃101","遊撃102","遊撃103"], // 不審者
-  backup:["201","202","203","204","205"] // 応援（無印）
+  investigation:["捜査301","捜査302","捜査303","捜査304"],
+  traffic:["交機201","交機202","交機203","交機204"],
+  patrol:["遊撃101","遊撃102","遊撃103","遊撃104"],
+  backup:["201","202","203","204","205","206"],
+  special:["特殊車両","機動隊","鑑識班"]
 };
+
 const PHRASES={
-  dispatch:["警視庁から{unit}、{zone}、{type_ja}の110番通報。至急現場へ転進せよ。","{zone}付近、{type_ja}。{unit}、対応願いたい。"],
-  enroute:["{unit}から本部、{zone}へ向かっております。到着予定{eta}分。","{unit}了解。{zone}方向へ移動中。"],
-  on_scene:["{unit}から本部、現着しました。状況確認中。","{unit}、現場到着。特徴一致の車両を発見。"],
-  backup:["{unit}から本部、{zone}にて応援要請。至急支援願いたい。","本部から各車、{zone}で{type_ja}、応援求む。"],
-  backup_response:["本部から{unit}、{zone}、応援要請あり。至急現場へ転進せよ。","{unit}、{zone}へ応援に向かえ。"],
-  clear:["{unit}から本部、処理完了。巡回密航へ戻ります。","{unit}、事案処理終了。"]
+  dispatch:["東京本部から{unit}、{zone}、{type_ja}の110番通報。至急現場へ転進せよ。","{zone}付近、{type_ja}。{unit}、対応願いたい。"],
+  enroute:["{unit}から東京本部、{zone}へ向かっております。到着予定{eta}分。","{unit}了解。{zone}方向へ移動中。"],
+  on_scene:["{unit}から東京本部、現着しました。状況確認中。","{unit}、現場到着。対象を確認。"],
+  backup:["{unit}から東京本部、{zone}にて応援要請。至急支援願いたい。","東京本部から各車、{zone}で{type_ja}、応援求む。"],
+  backup_response:["東京本部から{unit}、{zone}、応援要請あり。至急現場へ転進せよ。","{unit}、{zone}へ応援に向かえ。"],
+  emergency_deploy:["東京本部から全車両、緊急配備発令。{zone}、{type_ja}。該当区域の全車両は直ちに警戒態勢に入れ。",
+                    "緊急配備、緊急配備。{zone}付近で{type_ja}。全車両、厳重警戒せよ。"],
+  escape:["{unit}から東京本部、容疑車両が逃走。{direction}方向へ向かっている。追跡を要請する。",
+          "東京本部から全車、{zone}から容疑車両逃走中。車種{vehicle}、ナンバー不明。発見次第報告せよ。"],
+  special_request:["{unit}から東京本部、{zone}にて{special}を要請する。状況は{situation}。",
+                   "東京本部から{special}、{zone}へ至急出動せよ。詳細は{unit}と連携せよ。"],
+  mass_backup:["東京本部から管内全車両、{zone}で大規模事案発生。応援可能な全車両は至急現場へ向かえ。",
+               "{unit}から東京本部、{zone}、さらなる応援を要請。現場は混乱状態。"],
+  all_units_deploy:["東京本部から全車両、{zone}で特殊事案発生。管内全車両は直ちに{zone}へ集結せよ。",
+                    "緊急事態、緊急事態。{zone}で{type_ja}。全車両、最優先で{zone}へ向かえ。",
+                    "東京本部から全車両、{zone}、{type_ja}。現在進行中の事案を一時中断し、至急{zone}へ集結せよ。"],
+  escalate:["{unit}から東京本部、{zone}の事案が拡大。{escalate_reason}。レベル{level}に格上げを要請。",
+            "東京本部から全車、{zone}の事案がエスカレート。{escalate_reason}。警戒レベルを引き上げ。"],
+  arrest:["{unit}から東京本部、容疑者{num}名を現行犯逮捕。署へ護送します。",
+          "{unit}、容疑者を確保。抵抗なし。ただちに本署へ移送する。",
+          "{unit}から東京本部、容疑者確保完了。{num}名を逮捕、現在取り調べ中。"],
+  clear:["{unit}から東京本部、処理完了。巡回警戒へ戻ります。","{unit}、事案処理終了。"]
 };
 
 function updateCaseStatus(){
   const el=document.getElementById("caseList");
   const active=Array.from(activeCases.values()).filter(c=>c.phase!=='clear');
   if(active.length===0){
-    el.innerHTML='<div style="color:var(--muted);font-size:10px;padding:8px;">NO ACTIVE CASES</div>';
+    el.innerHTML='<div class="no-cases">現在、進行中の事案はありません</div>';
     return;
   }
+  active.sort((a,b)=>b.getLevel()-a.getLevel());
   el.innerHTML=active.map(c=>{
     const t=c.getElapsedTime();
     const m=Math.floor(t/60),s=t%60;
-    const unitsStr=c.units.join(',');
-    return`<div class="case-item"><span class="case-id">${c.id}</span><span class="case-unit">${unitsStr}</span><span class="case-phase">${c.getStatus()}</span><span class="case-zone">${c.zone}</span><span class="case-time">${m}:${String(s).padStart(2,'0')}</span></div>`;
+    const unitsStr=c.units.slice(0,2).join(', ')+(c.units.length>2?` 他${c.units.length-2}台`:'');
+    const levelInfo=LEVEL_NAMES[c.getLevel()];
+    const levelClass=`lv${c.getLevel()}`;
+    const escalateIcon=c.getLevel()>c.typeObj.level?'↑':'';
+    const typeJa=c.typeObj.ja;
+    return`<div class="case-card">
+      <div class="case-header">
+        <span class="level-badge ${levelClass}">${levelInfo.code}</span>
+        ${escalateIcon?`<span class="escalate-icon">${escalateIcon}</span>`:''}
+        <span class="case-id">${c.id}</span>
+        <span class="case-type">${typeJa}</span>
+      </div>
+      <div class="case-body">
+        <div class="case-info-row"><span class="info-label">地区:</span><span class="info-value">${c.zone}</span></div>
+        <div class="case-info-row"><span class="info-label">状態:</span><span class="info-value">${c.getStatus()}</span></div>
+      </div>
+      <div class="case-footer">
+        <span class="case-units">${unitsStr}</span>
+        <span class="case-time">${m}:${String(s).padStart(2,'0')}</span>
+      </div>
+    </div>`;
   }).join('');
 }
 
+// このコードを元のHTMLファイルの<script>タグ内の該当部分と置き換えてください
+
 function genMessage(seed,n){
-  const t=TYPES[(rand01(seed,"type",n)*TYPES.length)|0];
-  const zone=ZONES[(rand01(seed,"zone",n)*ZONES.length)|0];
-  
-  // 全ユニットのリスト
-  const allUnits=[...UNIT_TYPES.investigation,...UNIT_TYPES.traffic,...UNIT_TYPES.patrol,...UNIT_TYPES.backup];
-  
-  // 稼働中のユニットを除外
-  const busyUnits=new Set();
-  for(let[id,c]of activeCases){
-    if(c.phase!=='clear'){
-      c.units.forEach(u=>busyUnits.add(u));
-    }
+  const totalWeight=TYPES.reduce((sum,t)=>sum+t.weight,0);
+  const r=rand01(seed,"type",n)*totalWeight;
+  let cumulative=0;
+  let t=TYPES[0];
+  for(let type of TYPES){
+    cumulative+=type.weight;
+    if(r<=cumulative){t=type;break;}
   }
   
-  // 事案タイプに応じた利用可能なユニット
-  const getAvailableUnits=(unitType)=>{
-    return UNIT_TYPES[unitType].filter(u=>!busyUnits.has(u));
-  };
+  const zone=ZONES[(rand01(seed,"zone",n)*ZONES.length)|0];
+  const allUnits=[...UNIT_TYPES.investigation,...UNIT_TYPES.traffic,...UNIT_TYPES.patrol,...UNIT_TYPES.backup];
+  
+  const busyUnits=new Set();
+  for(let[id,c]of activeCases){
+    if(c.phase!=='clear') c.units.forEach(u=>busyUnits.add(u));
+  }
+  
+  const getAvailableUnits=(unitType)=>UNIT_TYPES[unitType].filter(u=>!busyUnits.has(u));
   
   let existingCase=null;
   let unit=null;
   let phase,caseId;
   
-  // 最優先：応答待ちの事案があるか確認
+  const activeCount=Array.from(activeCases.values()).filter(c=>c.phase!=='clear').length;
+  
+  // 応答待ちチェック
   for(let[id,c]of activeCases){
     if(c.awaitingResponse){
       existingCase=c;
@@ -211,7 +759,7 @@ function genMessage(seed,n){
       if(c.phase==='dispatch'){
         phase='enroute';
         c.advancePhase(phase);
-      }else if(c.phase==='backup_response'){
+      }else if(c.phase==='backup_response'||c.phase==='special_request'||c.phase==='all_units_deploy'){
         phase='enroute';
         c.advancePhase('on_scene');
       }
@@ -219,31 +767,114 @@ function genMessage(seed,n){
     }
   }
   
-  // 応答待ちがない場合、通常のフロー
+  // 既存事案の継続
   if(!existingCase){
     for(let[id,c]of activeCases){
-      if(c.phase!=='clear'){
-        if(rand01(seed,"continue",n)>0.2){
-          existingCase=c;
-          unit=c.units[0];
-          break;
-        }
+      if(c.phase!=='clear'&&rand01(seed,"continue",n)>0.25){
+        existingCase=c;
+        unit=c.units[0];
+        break;
       }
     }
   }
   
-  // 既存事案を進める
+  // 既存事案の進行処理
   if(existingCase&&!phase){
     caseId=existingCase.id;
+    const cType=existingCase.typeObj;
+    const levelInfo=LEVEL_NAMES[existingCase.getLevel()];
     
-    // 現場対応中の場合、20%の確率で応援要請
-    if(existingCase.phase==='on_scene'&&!existingCase.needsBackup&&rand01(seed,"backup",n)<0.2){
+    // エスカレーション判定
+    if(existingCase.phase==='on_scene'&&existingCase.getLevel()<3&&rand01(seed,"escalate",n)<0.15){
+      if(existingCase.escalateLevel()){
+        phase='escalate';
+        const reasons=["容疑者が凶器所持","複数の容疑者を確認","被害者に重傷者あり","周辺への影響拡大"];
+        const escalate_reason=reasons[Math.floor(rand01(seed,"reason",n)*reasons.length)];
+        const phraseSet=PHRASES[phase];
+        const tpl=phraseSet[Math.floor(rand01(seed,"tpl",n)*phraseSet.length)];
+        const msg=tpl.replace("{zone}",existingCase.zone)
+                    .replace("{type_ja}",cType.ja)
+                    .replace("{unit}",unit)
+                    .replace("{escalate_reason}",escalate_reason)
+                    .replace("{level}",existingCase.getLevel());
+        const newLevelInfo=LEVEL_NAMES[existingCase.getLevel()];
+        return{id:`N${String(n).padStart(6,"0")}`,caseId,ch:newLevelInfo.code,phase,zone:existingCase.zone,unit,msg};
+      }
+    }
+    
+    // 逮捕判定
+    if(existingCase.phase==='on_scene'&&!existingCase.hasArrested&&existingCase.getLevel()>=2&&rand01(seed,"arrest",n)<0.30){
+      phase='arrest';
+      existingCase.hasArrested=true;
+      existingCase.advancePhase(phase);
+      const num=1+Math.floor(rand01(seed,"arrestnum",n)*3);
+      const phraseSet=PHRASES[phase];
+      const tpl=phraseSet[Math.floor(rand01(seed,"tpl",n)*phraseSet.length)];
+      const msg=tpl.replace("{zone}",existingCase.zone).replace("{type_ja}",cType.ja).replace("{unit}",unit).replace("{num}",num);
+      return{id:`N${String(n).padStart(6,"0")}`,caseId,ch:levelInfo.code,phase,zone:existingCase.zone,unit,msg};
+    }
+    
+    // レベル4：全車両出動
+    if(cType.level===4&&!existingCase.hasSpecial&&existingCase.phase==='on_scene'){
+      phase='all_units_deploy';
+      existingCase.hasSpecial=true;
+      existingCase.advancePhase(phase);
+      const availableUnits=allUnits.filter(u=>!busyUnits.has(u));
+      availableUnits.forEach(u=>existingCase.addUnit(u));
+      const phraseSet=PHRASES[phase];
+      const tpl=phraseSet[Math.floor(rand01(seed,"tpl",n)*phraseSet.length)];
+      const msg=tpl.replace("{zone}",existingCase.zone).replace("{type_ja}",cType.ja).replace("{unit}",unit);
+      return{id:`N${String(n).padStart(6,"0")}`,caseId,ch:levelInfo.code,phase,zone:existingCase.zone,unit,msg};
+    }
+    
+    // 逃走イベント
+    if(cType.canEscalate&&!existingCase.hasEscaped&&existingCase.phase==='on_scene'&&rand01(seed,"escape",n)<0.15){
+      phase='escape';
+      existingCase.hasEscaped=true;
+      existingCase.advancePhase(phase);
+      existingCase.escalateLevel();
+      const directions=["北","南","東","西","幹線12号","湾岸23号"];
+      const direction=directions[Math.floor(rand01(seed,"direction",n)*directions.length)];
+      const vehicles=["白いセダン","黒いワンボックス","銀色の軽自動車","赤いスポーツカー"];
+      const vehicle=vehicles[Math.floor(rand01(seed,"vehicle",n)*vehicles.length)];
+      const phraseSet=PHRASES[phase];
+      const tpl=phraseSet[Math.floor(rand01(seed,"tpl",n)*phraseSet.length)];
+      const msg=tpl.replace("{zone}",existingCase.zone).replace("{type_ja}",cType.ja).replace("{unit}",unit).replace("{direction}",direction).replace("{vehicle}",vehicle);
+      const newLevelInfo=LEVEL_NAMES[existingCase.getLevel()];
+      return{id:`N${String(n).padStart(6,"0")}`,caseId,ch:newLevelInfo.code,phase,zone:existingCase.zone,unit,msg};
+    }
+    
+    // 緊急配備
+    if(cType.needsEmergency&&!existingCase.hasEmergency&&existingCase.phase==='on_scene'){
+      phase='emergency_deploy';
+      existingCase.hasEmergency=true;
+      existingCase.advancePhase(phase);
+      const phraseSet=PHRASES[phase];
+      const tpl=phraseSet[Math.floor(rand01(seed,"tpl",n)*phraseSet.length)];
+      const msg=tpl.replace("{zone}",existingCase.zone).replace("{type_ja}",cType.ja).replace("{unit}",unit);
+      return{id:`N${String(n).padStart(6,"0")}`,caseId,ch:levelInfo.code,phase,zone:existingCase.zone,unit,msg};
+    }
+    
+    // 大規模応援
+    if(existingCase.phase==='on_scene'&&!existingCase.needsBackup){
+      const needsMassBackup=(existingCase.getLevel()>=3&&rand01(seed,"mass",n)<0.20)||(existingCase.units.length>=2&&rand01(seed,"mass2",n)<0.10);
+      if(needsMassBackup){
+        phase='mass_backup';
+        existingCase.needsBackup=true;
+        existingCase.advancePhase(phase);
+        const phraseSet=PHRASES[phase];
+        const tpl=phraseSet[Math.floor(rand01(seed,"tpl",n)*phraseSet.length)];
+        const msg=tpl.replace("{zone}",existingCase.zone).replace("{type_ja}",cType.ja).replace("{unit}",unit);
+        return{id:`N${String(n).padStart(6,"0")}`,caseId,ch:levelInfo.code,phase,zone:existingCase.zone,unit,msg};
+      }
+    }
+    
+    // 通常応援
+    if(existingCase.phase==='on_scene'&&!existingCase.needsBackup&&existingCase.getLevel()>=2&&rand01(seed,"backup",n)<0.25){
       phase='backup';
       existingCase.needsBackup=true;
       existingCase.advancePhase(phase);
-    }
-    // 応援要請後、応援ユニット（無印）を派遣
-    else if(existingCase.phase==='backup'){
+    }else if(existingCase.phase==='backup'||existingCase.phase==='mass_backup'){
       const availableBackup=getAvailableUnits('backup');
       if(availableBackup.length>0){
         phase='backup_response';
@@ -251,75 +882,130 @@ function genMessage(seed,n){
         existingCase.addUnit(unit);
         existingCase.advancePhase('backup_response');
       }else{
-        // 応援ユニットがいない場合は通常進行
         phase='on_scene';
         existingCase.advancePhase(phase);
       }
-    }
-    // 通常のフェーズ進行
-    else{
-      const next={enroute:'on_scene',on_scene:'clear',backup:'on_scene'};
+    }else{
+      const next={enroute:'on_scene',on_scene:'clear',backup:'on_scene',emergency_deploy:'on_scene',escape:'clear',arrest:'clear',all_units_deploy:'on_scene'};
       phase=next[existingCase.phase]||'clear';
       existingCase.advancePhase(phase);
       if(phase==='clear')setTimeout(()=>activeCases.delete(caseId),3000);
     }
   }
-  // 新規事案
-  else if(!existingCase){
+  // 新規事案（5件未満）
+  else if(!existingCase&&activeCount<5){
     const availableForType=getAvailableUnits(t.unitType);
     if(availableForType.length===0){
-      // 該当タイプのユニットがいない場合はランダム
       const allAvailable=allUnits.filter(u=>!busyUnits.has(u));
-      if(allAvailable.length>0){
-        unit=allAvailable[(rand01(seed,"unit",n)*allAvailable.length)|0];
-      }else{
-        unit=allUnits[(rand01(seed,"unit",n)*allUnits.length)|0];
-      }
+      unit=allAvailable.length>0?allAvailable[(rand01(seed,"unit",n)*allAvailable.length)|0]:allUnits[(rand01(seed,"unit",n)*allUnits.length)|0];
     }else{
       unit=availableForType[(rand01(seed,"unit",n)*availableForType.length)|0];
     }
     caseId=`C${String(caseIdCounter++).padStart(4,'0')}`;
     phase='dispatch';
-    activeCases.set(caseId,new Case(caseId,t.key,zone,unit,Date.now()));
+    activeCases.set(caseId,new Case(caseId,t.key,t,zone,unit,Date.now()));
   }else{
-    caseId=existingCase.id;
+    if(existingCase){
+      caseId=existingCase.id;
+    }else{
+      return null;
+    }
   }
   
-  const set=PHRASES[phase]||["{unit}から本部、報告願います。"];
-  const tpl=set[Math.floor(rand01(seed,"tpl",n)*set.length)];
+  const msgZone=existingCase?existingCase.zone:zone;
+  const levelInfo=existingCase?LEVEL_NAMES[existingCase.getLevel()]:LEVEL_NAMES[t.level];
+  const phraseSet=PHRASES[phase]||["{unit}から東京本部、報告願います。"];
+  const tpl=phraseSet[Math.floor(rand01(seed,"tpl",n)*phraseSet.length)];
   const eta=2+Math.floor(rand01(seed,"eta",n)*8);
-  const num=1+Math.floor(rand01(seed,"num",n)*3);
-  const msg=tpl.replace("{zone}",zone).replace("{type_ja}",t.ja).replace("{unit}",unit).replace("{eta}",eta).replace("{num}",num);
-  return{id:`N${String(n).padStart(6,"0")}`,caseId,ch:t.ch,phase,zone,unit,msg};
+  const msg=tpl.replace("{zone}",msgZone).replace("{type_ja}",t.ja).replace("{unit}",unit).replace("{eta}",eta);
+  // メッセージ生成部分の修正（genMessage関数内の最後のreturn文）
+  // 元のmsgをwrapする形に変更
+ const parts = msg.match(/^(.+?[、。])(.+)$/);
+  const wrappedMsg = parts 
+    ? `${parts[1]}<span class="highlight">${parts[2]}</span>`
+    : `<span class="highlight">${msg}</span>`;
+
+  return{
+    id:`N${String(n).padStart(6,"0")}`,
+    caseId,
+    ch:levelInfo.code,
+    phase,
+    zone:msgZone,
+    unit,
+    msg:wrappedMsg
+  }; return{id:`N${String(n).padStart(6,"0")}`,caseId,ch:levelInfo.code,phase,zone:msgZone,unit,msg};
 }
 
 function charClass(ch){const c=ch.codePointAt(0);if(c<=0x7F)return"ascii";if(c>=0x3040&&c<=0x309F)return"hira";if(c>=0x30A0&&c<=0x30FF)return"kata";if((c>=0x4E00&&c<=0x9FFF)||(c>=0x3400&&c<=0x4DBF))return"kanji";return"other";}
+
+// typeOut関数の修正（HTML対応）
 async function typeOut(seed,cpsBase,ev,msgEl){
   const weights={hira:1.0,kata:1.0,ascii:0.9,kanji:1.15,other:1.0};
   const pauses={",":120,"、":160,".":180,"。":220," ":50};
   const r=rand01(seed,"speed",ev.id),cps=cpsBase*(1-0.15+2*0.15*r),base=1000/cps;
-  msgEl.textContent="";
-  for(let i=0;i<ev.msg.length;i++){
-    const ch=ev.msg[i],w=weights[charClass(ch)]??1.0;
+  msgEl.innerHTML="";  // textContent から innerHTML に変更
+  
+  // HTMLタグを考慮した文字列処理
+  const tempDiv=document.createElement('div');
+  tempDiv.innerHTML=ev.msg;
+  const fullText=tempDiv.textContent;
+  
+  let currentPos=0;
+  for(let i=0;i<fullText.length;i++){
+    const ch=fullText[i],w=weights[charClass(ch)]??1.0;
     let extra=pauses[ch]?pauses[ch]*(0.9+0.2*rand01(seed,"pause",ev.id,i)):0;
     await sleep(qms(base*w+extra,10));
-    msgEl.textContent+=ch;
+    currentPos++;
+    
+    // 元のHTMLタグを保持しながら表示
+    tempDiv.innerHTML=ev.msg;
+    const textNodes=[];
+    const walk=(node)=>{
+      if(node.nodeType===3)textNodes.push(node);
+      else node.childNodes.forEach(walk);
+    };
+    walk(tempDiv);
+    
+    let charCount=0;
+    textNodes.forEach(node=>{
+      const len=node.textContent.length;
+      if(charCount+len<=currentPos){
+        charCount+=len;
+      }else if(charCount<currentPos){
+        node.textContent=node.textContent.substring(0,currentPos-charCount);
+        charCount=currentPos;
+      }else{
+        node.textContent='';
+      }
+    });
+    msgEl.innerHTML=tempDiv.innerHTML;
   }
 }
 
-function gapMs(seed,nextIndex){const base=1800;return Math.max(800,Math.min(3800,Math.round(base*(0.6+0.8*rand01(seed,"gap",nextIndex)))));}
+function gapMs(seed,nextIndex){
+  const activeCount=Array.from(activeCases.values()).filter(c=>c.phase!=='clear').length;
+  const urgentCount=Array.from(activeCases.values()).filter(c=>c.phase!=='clear'&&c.getLevel()>=3).length;
+  
+  let base=1800;
+  if(urgentCount>0)base=1200;
+  if(activeCount>=5)base=2400;
+  
+  return Math.max(600,Math.min(4000,Math.round(base*(0.5+0.9*rand01(seed,"gap",nextIndex)))));
+}
+
 async function getClockOffsetMs(){try{const t0=performance.now();const res=await fetch(location.href,{method:"HEAD",cache:"no-store"});const srv=Date.parse(res.headers.get("Date"));const t1=performance.now();return(srv+(t1-t0)/2)-Date.now();}catch{return 0;}}
 
-// 時計
+// 時計のミリ秒表示対応（時計セクション）
 (function(){
   const el=document.getElementById("jst");
   function pad(n,len=2){return String(n).padStart(len,"0");}
   function tick(){
     const now=new Date();
-    const y=now.getFullYear(),m=now.getMonth()+1,d=now.getDate();
-    el.textContent=`${y}/${pad(m)}/${pad(d)} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${pad(now.getMilliseconds(),3)} JST`;
+    const ms=now.getMilliseconds();
+    el.textContent=`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}.${pad(ms,3)} JST`;
   }
-  tick();setInterval(tick,33);
+  tick();
+  setInterval(tick,10);  /* 10msごとに更新 */
 })();
 
 // 音声
@@ -345,17 +1031,17 @@ function toneNTT(kind){
   osc.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
 
   const g = gain.gain;
-  const t1 = t0 + p.atk;                      // Attack
-  const t2 = t1 + p.dec;                      // Decay
-  const t3 = t0 + (p.dur / 1000) * 0.7;       // Sustain (約70%)
-  const t4 = t0 + (p.dur / 1000);             // Release開始
-  const t5 = t4 + p.rel;                      // 終了
+  const t1 = t0 + p.atk;
+  const t2 = t1 + p.dec;
+  const t3 = t0 + (p.dur / 1000) * 0.7;
+  const t4 = t0 + (p.dur / 1000);
+  const t5 = t4 + p.rel;
 
   g.setValueAtTime(0, t0);
-  g.linearRampToValueAtTime(p.g, t1);         // Attack上昇
-  g.linearRampToValueAtTime(p.g * 0.8, t2);   // Decay減衰
-  g.setValueAtTime(p.g * 0.8, t3);            // Sustain維持
-  g.linearRampToValueAtTime(0.0001, t5);      // Releaseフェードアウト
+  g.linearRampToValueAtTime(p.g, t1);
+  g.linearRampToValueAtTime(p.g * 0.8, t2);
+  g.setValueAtTime(p.g * 0.8, t3);
+  g.linearRampToValueAtTime(0.0001, t5);
 
   osc.start(t0);
   osc.stop(t5 + 0.05);
@@ -373,7 +1059,6 @@ function startTimeSignal(){
   },4);
 }
 
-
 function startWhiteNoise(){
   if(!audioCtx||noiseNode)return;
   const bufferSize=2*audioCtx.sampleRate;
@@ -387,6 +1072,7 @@ function startWhiteNoise(){
   noiseNode.connect(noiseGain);noiseGain.connect(hp);hp.connect(lp);lp.connect(audioCtx.destination);
   noiseNode.start();
 }
+
 function stopWhiteNoise(){
   if(noiseNode){noiseNode.stop();noiseNode.disconnect();noiseNode=null;}
   if(noiseGain){noiseGain.disconnect();noiseGain=null;}
@@ -424,6 +1110,7 @@ function pickJaVoice(){
   if(cand.length===0)cand=vs.filter(v=>/JP|Japanese/i.test(v.name));
   return cand[0]||vs[0]||null;
 }
+
 function loadVoices(){
   if(!('speechSynthesis'in window))return;
   const load=()=>{
@@ -453,30 +1140,50 @@ document.getElementById("rateSlider").addEventListener('input',()=>{
   document.getElementById("rateValue").textContent=ttsRate.toFixed(1);
 });
 
-// --- PATCH START (iPad TTS: speakAndHighlight replacement) ---
+let ttsReady = false;
+
+function isiOS(){
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+async function initTTS(){
+  if (ttsReady || !('speechSynthesis' in window)) return;
+  await new Promise((resolve)=>{
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0;
+    u.onend = () => { ttsReady = true; loadVoices(); resolve(); };
+    try { speechSynthesis.speak(u); } catch { resolve(); }
+  });
+}
+
+// speakAndHighlight関数内の修正
 async function speakAndHighlight(ev, msgEl, seed, cpsBase){
   if(!('speechSynthesis' in window)) return Promise.resolve();
 
   ensureAudio();
   const typePromise = typeOut(seed, cpsBase, ev, msgEl);
 
-  // iPad/SafariはTTSとWebAudioの同時再生で無音化しやすい → 先に一時停止
   let suspended = false;
   if(isiOS() && audioCtx && audioCtx.state === 'running'){
     await audioCtx.suspend();
     suspended = true;
   }
 
-  // iOSは同時再生を避けるためビープ/ノイズを鳴らさない
   if(!isiOS()){
     playTransmitStart();
     setTimeout(()=>startWhiteNoise(), 100);
   }
 
-  const utter = new SpeechSynthesisUtterance(ev.msg);
+  // HTMLタグを除去してテキストのみを抽出
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = ev.msg;
+  const plainText = tempDiv.textContent || tempDiv.innerText || '';
+
+  const utter = new SpeechSynthesisUtterance(plainText);  // HTMLタグを除去したテキストを使用
   utter.lang   = (chosenVoice?.lang) || 'ja-JP';
-  utter.voice  = chosenVoice || null;             // nullでもOK（既定声）
-  utter.rate   = isiOS() ? Math.min(ttsRate, 1.2) : ttsRate; // iOSは速すぎると無音化しやすい
+  utter.voice  = chosenVoice || null;
+  utter.rate   = isiOS() ? Math.min(ttsRate, 1.2) : ttsRate;
   utter.pitch  = 1.0;
   utter.volume = 1.0;
 
@@ -491,22 +1198,17 @@ async function speakAndHighlight(ev, msgEl, seed, cpsBase){
     utter.onend   = cleanup;
     utter.onerror = cleanup;
 
-    // 直前の発話だけを止める（直後の speak を潰さない）
     try{
       if(speechSynthesis.speaking || speechSynthesis.pending){
         speechSynthesis.cancel();
       }
     }catch{}
 
-    // iOSで cancel 直後の speak が潰れる件の回避：0ms遅延で次フレームに投げる
     setTimeout(()=>{ try{ speechSynthesis.speak(utter); }catch{ cleanup(); } }, 0);
   });
 
   return Promise.all([typePromise, speakPromise]);
 }
-// --- PATCH END ---
-
-
 // メインループ
 async function runFromNow(seed,cpsBase){
   const status=document.getElementById("status"),log=document.getElementById("log");
@@ -525,21 +1227,41 @@ async function runFromNow(seed,cpsBase){
   },1000);
   while(my===runningToken){
     const ev=genMessage(seed,n);
+    if(!ev){
+      // 新規事案が生成されなかった場合はスキップ
+      await sleep(500);
+      n++;
+      continue;
+    }
+    // runFromNow関数内のメッセージ生成部分を修正
     const row=document.createElement("div");
-    row.className="row";
+    row.className="radio-message";
+
+    // メタ情報をまとめるコンテナ
+    const meta=document.createElement("div");
+    meta.className="radio-message-meta";
+
     const ts=document.createElement("div");
-    ts.className="ts";
+    ts.className="msg-time";
     const displayTime=new Date(currentJstMs);
     ts.textContent=displayTime.toLocaleTimeString("ja-JP",{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
     const ch=document.createElement("div");
-    ch.className=`ch ${ev.ch}`;
+    ch.className=`msg-level lv${ev.ch.toLowerCase().replace('lv','')}`;
     ch.textContent=ev.ch;
+
     const caseTag=document.createElement("div");
-    caseTag.className="case-tag";
+    caseTag.className="msg-case";
     caseTag.textContent=ev.caseId;
+
+    // メタ情報をまとめる
+    meta.append(ts,ch,caseTag);
+
     const msg=document.createElement("div");
-    msg.className="msg";
-    row.append(ts,ch,caseTag,msg);
+    msg.className="msg-content";
+
+    // メタ情報と本文を縦に配置
+    row.append(meta,msg);
     log.appendChild(row);
     log.scrollTop=log.scrollHeight;
     const startTime=performance.now();
@@ -562,50 +1284,21 @@ async function runFromNow(seed,cpsBase){
 
 // イベントリスナー
 document.getElementById("syncBtn").addEventListener("click", async ()=>{
-  console.log("Button clicked!");
   ensureAudio();
-  await initTTS();                       // ★ 追加
+  await initTTS();
   clockOffset = await getClockOffsetMs();
   startTimeSignal();
   runFromNow(FIXED_SEED, BASE_CPS);
 });
 
 document.getElementById("ttsToggle").addEventListener("click", async ()=>{
-  await initTTS();                       // ★ 追加
+  await initTTS();
   TTS_ENABLED = !TTS_ENABLED;
   const btn = document.getElementById("ttsToggle");
-  btn.textContent = `VOICE: ${TTS_ENABLED ? "ON" : "OFF"}`;
-  btn.className = TTS_ENABLED ? "" : "ghost";
+  btn.textContent = `音声: ${TTS_ENABLED ? "ON" : "OFF"}`;
+  btn.className = TTS_ENABLED ? "btn active" : "btn";
   try{ if('speechSynthesis' in window) speechSynthesis.cancel(); }catch{}
 });
-
-console.log("Script loaded successfully!");
-
-// --- PATCH START (iPad TTS) ---
-let ttsReady = false;
-
-function isiOS(){
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
-// iOS/Safariで getVoices が空・TTSが無音化するのを回避
-async function initTTS(){
-  if (ttsReady || !('speechSynthesis' in window)) return;
-  await new Promise((resolve)=>{
-    const u = new SpeechSynthesisUtterance(' ');
-    u.volume = 0;                 // 無音で1回だけ話す＝TTSをウォームアップ
-    u.onend = () => { ttsReady = true; loadVoices(); resolve(); };
-    try { speechSynthesis.speak(u); } catch { resolve(); }
-  });
-}
-// --- PATCH END ---
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(console.error);
-  });
-}
 
 </script>
 </body>
