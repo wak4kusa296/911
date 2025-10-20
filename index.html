@@ -412,9 +412,9 @@ select{
 
 <script>
 // グローバル変数
-const FIXED_SEED = "kitakyu2025";
 const BASE_CPS = 12;
 let locationName = "本部";
+let whiteNoiseNode = null;
 let TTS_ENABLED = false;
 let chosenVoice = null;
 let ttsRate = 1.5;
@@ -567,13 +567,16 @@ class ScenarioLoader {
 // ==========================================
 // メッセージパーサー
 // ==========================================
+// ==========================================
+// メッセージパーサー
+// ==========================================
 
 class MessageParser {
   constructor(paramLists) {
     this.paramLists = paramLists;
   }
 
-  parse(template, context, seed) {
+  parse(template, context) { // seed引数を削除
     let result = template;
     let lastResult = '';
 
@@ -582,26 +585,26 @@ class MessageParser {
 
         result = result.replace(/\{([^}#]+\/[^}]+)\}/g, (match, items) => {
           const choices = items.split('/').map(s => s.trim());
-          const index = Math.floor(this.rand01(seed, 'inline', match) * choices.length);
+          const index = Math.floor(Math.random() * choices.length); // Math.random() に変更
           return choices[index];
         });
 
         result = result.replace(/\{#(\w+):(\d+)-(\d+)\}/g, (match, name, min, max) => {
           const minVal = parseInt(min);
           const maxVal = parseInt(max);
-          return Math.floor(this.rand01(seed, name, match) * (maxVal - minVal + 1)) + minVal;
+          return Math.floor(Math.random() * (maxVal - minVal + 1)) + minVal; // Math.random() に変更
         });
 
         result = result.replace(/\{#(\w+)\}/g, (match, name) => {
           if (name === 'num') {
-            return Math.floor(this.rand01(seed, 'num', match) * 3) + 1;
+            return Math.floor(Math.random() * 3) + 1; // Math.random() に変更
           }
           if (name === 'eta') {
-            return Math.floor(this.rand01(seed, 'eta', match) * 9) + 2;
+            return Math.floor(Math.random() * 9) + 2; // Math.random() に変更
           }
           if (this.paramLists[name]) {
             const list = this.paramLists[name];
-            const index = Math.floor(this.rand01(seed, name, match) * list.length);
+            const index = Math.floor(Math.random() * list.length); // Math.random() に変更
             return list[index];
           }
           return match;
@@ -619,30 +622,19 @@ class MessageParser {
     return result;
   }
 
-  rand01(seed, ...keys) {
-    const str = [seed, ...keys].join('|');
-    let h = 2166136261 >>> 0;
-    for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    h = h >>> 0;
-    let t = h;
-    t += 0x6D2B79F5;
-    let x = Math.imul(t ^ t >>> 15, 1 | t);
-    x ^= x + Math.imul(x ^ x >>> 7, 61 | x);
-    return ((x ^ x >>> 14) >>> 0) / 4294967296;
-  }
+  // rand01メソッドは完全に削除
 }
 
 // ==========================================
 // シナリオエンジン
 // ==========================================
+// ==========================================
+// シナリオエンジン
+// ==========================================
 
 class ScenarioEngine {
-  constructor(loader, seed, unitTypes) {
+  constructor(loader, unitTypes) { // seed引数を削除
     this.loader = loader;
-    this.seed = seed;
     this.parser = new MessageParser(loader.paramLists);
     this.unitTypes = unitTypes;
     this.activeCases = new Map();
@@ -659,7 +651,7 @@ class ScenarioEngine {
       default:
         if (condition.startsWith('rand<')) {
           const threshold = parseFloat(condition.substring(5));
-          return this.parser.rand01(this.seed, 'condition', caseState.id, caseState.elapsed) < threshold;
+          return Math.random() < threshold; // Math.random() に変更
         }
         return false;
     }
@@ -668,7 +660,7 @@ class ScenarioEngine {
   selectNextNode(currentNode, caseState) {
     const candidates = currentNode.children.filter(child => {
       const conditionMet = this.evaluateCondition(child.condition, caseState);
-      const probabilityMet = this.parser.rand01(this.seed, 'select', child.id, caseState.id) < child.probability;
+      const probabilityMet = Math.random() < child.probability; // Math.random() に変更
       return conditionMet && probabilityMet;
     });
     if (candidates.length === 0) {
@@ -677,12 +669,12 @@ class ScenarioEngine {
     return candidates[0];
   }
 
-generateNewCase(n, busyUnits) {
+  generateNewCase(busyUnits) { // n引数を削除
     const allScenarios = this.loader.scenarios.flatMap(level => level.scenarios);
     const totalWeight = allScenarios.reduce((sum, s) => sum + s.probability, 0);
     if (totalWeight <= 0) return null;
     
-    const r = this.parser.rand01(this.seed, 'scenario', n) * totalWeight;
+    const r = Math.random() * totalWeight; // Math.random() に変更
     let cumulative = 0;
     let selectedScenario = allScenarios[0];
     for (const scenario of allScenarios) {
@@ -709,9 +701,9 @@ generateNewCase(n, busyUnits) {
     const availableUnitsForCase = unitPool.filter(u => !busyUnits.has(u));
     if (availableUnitsForCase.length === 0) return null;
     
-    const unit = availableUnitsForCase[Math.floor(this.parser.rand01(this.seed, 'unit', n) * availableUnitsForCase.length)];
+    const unit = availableUnitsForCase[Math.floor(Math.random() * availableUnitsForCase.length)]; // Math.random() に変更
     const zoneList = this.loader.paramLists.zones || [];
-    const zone = zoneList[Math.floor(this.parser.rand01(this.seed, 'zone', n) * zoneList.length)];
+    const zone = zoneList[Math.floor(Math.random() * zoneList.length)]; // Math.random() に変更
     const caseId = `C${String(this.caseIdCounter++).padStart(4, '0')}`;
     const firstNode = selectedScenario.rootNodes[0];
     
@@ -733,24 +725,23 @@ generateNewCase(n, busyUnits) {
 
     this.activeCases.set(caseId, caseObj);
     const context = { unit, zone, type_ja: selectedScenario.name };
-    let message = this.parser.parse(firstNode.message, context, this.seed + n);
+    let message = this.parser.parse(firstNode.message, context); // seed引数を削除
     message = message.replace(/東京/g, locationName);
     
     return {
-      id: `N${String(n).padStart(6, '0')}`, caseId, level: selectedScenario.level,
+      id: `N${String(this.caseIdCounter++).padStart(6, '0')}`, // nをcaseIdCounterに変更
+      caseId, level: selectedScenario.level,
       phase: firstNode.phase, zone, unit, message, scenarioName: selectedScenario.name
     };
   }
-progressCase(caseId, n, busyUnits) {
+
+  progressCase(caseId, busyUnits) { // n引数を削除
     const caseObj = this.activeCases.get(caseId);
     if (!caseObj) return null;
 
-    // ▼▼▼【ここからが変更点】▼▼▼
-    // 削除タイマーが既にセットされている場合は、何もしない
     if (caseObj.isDeleting) {
       return null;
     }
-    // ▲▲▲【ここまでが変更点】▲▲▲
 
     const availableBackupUnits = (this.unitTypes.backup || []).filter(u => !busyUnits.has(u));
     const caseState = {
@@ -761,27 +752,21 @@ progressCase(caseId, n, busyUnits) {
 
     const nextNode = this.selectNextNode(caseObj.currentNode, caseState);
 
-    // ▼▼▼【ここからが変更点】▼▼▼
-    // 次のノードがない場合、事案を消さずにそのまま残す
     if (!nextNode) {
       if (caseObj.awaitingResponse) {
         caseObj.awaitingResponse = false;
       }
       return null;
     }
-    // ▲▲▲【ここまでが変更点】▲▲▲
 
     caseObj.currentNode = nextNode;
     caseObj.phase = nextNode.phase;
     caseObj.awaitingResponse = (nextNode.condition === 'awaiting_response');
 
-    // ▼▼▼【ここからが変更点】▼▼▼
-    // clearフェーズに達した時に、一度だけ削除タイマーをセットする
     if (caseObj.phase === 'clear' && !caseObj.isDeleting) {
-      caseObj.isDeleting = true; // 削除処理中フラグを立てる
+      caseObj.isDeleting = true;
       setTimeout(() => this.activeCases.delete(caseId), 5000);
     }
-    // ▲▲▲【ここまでが変更点】▲▲▲
 
     if (nextNode.params && nextNode.params.add_units) {
         const newUnits = nextNode.params.add_units.split(';');
@@ -805,11 +790,12 @@ progressCase(caseId, n, busyUnits) {
       backup_unit: backupUnit || latestBackupUnit
     };
     
-    let message = this.parser.parse(nextNode.message, context, this.seed + n);
+    let message = this.parser.parse(nextNode.message, context); // seed引数を削除
     message = message.replace(/東京/g, locationName);
 
     return {
-      id: `N${String(n).padStart(6, '0')}`, caseId, level: caseObj.level,
+      id: `N${String(this.caseIdCounter++).padStart(6, '0')}`, // nをcaseIdCounterに変更
+      caseId, level: caseObj.level,
       phase: nextNode.phase, zone: caseObj.zone,
       unit: backupUnit || caseObj.unit, message, scenarioName: caseObj.scenario.name
     };
@@ -823,7 +809,6 @@ progressCase(caseId, n, busyUnits) {
       return this.getAllActiveCases().filter(c => c.isVisible);
   }
 }
-
 // ==========================================
 // UI更新
 // ==========================================
@@ -899,6 +884,150 @@ function ensureAudio() {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === "suspended")
     audioCtx.resume();
+}
+function playChirp(type) {
+  if (!audioCtx) return;
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'triangle'; // 'sine'から'square'に変更
+  gain.gain.value = 0;
+
+  if (type === 'start') {
+    // ピコッ (上昇2音)
+    osc.frequency.setValueAtTime(250, t0 + 0.12);
+    gain.gain.linearRampToValueAtTime(0.05, t0 + 0.13); // ゲインを少し調整
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.17);
+
+    osc.frequency.setValueAtTime(750, t0 + 0.06);
+    gain.gain.linearRampToValueAtTime(0.05, t0 + 0.07); // ゲインを少し調整
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.11);
+  } else if (type === 'end') {
+    // ピロリッ (下降3音)
+    osc.frequency.setValueAtTime(1500, t0);
+    gain.gain.linearRampToValueAtTime(0.05, t0 + 0.01); // ゲインを少し調整
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.05);
+
+    osc.frequency.setValueAtTime(750, t0 + 0.06);
+    gain.gain.linearRampToValueAtTime(0.05, t0 + 0.07); // ゲインを少し調整
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.11);
+
+    osc.frequency.setValueAtTime(250, t0 + 0.12);
+    gain.gain.linearRampToValueAtTime(0.05, t0 + 0.13); // ゲインを少し調整
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.17);
+  }
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t0);
+  osc.stop(t0 + 0.2);
+}
+
+function startWhiteNoise() {
+  if (!audioCtx) return;
+  const bufferSize = audioCtx.sampleRate * 1;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const output = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    output[i] = Math.random() * 2 - 1;
+  }
+
+  whiteNoiseNode = audioCtx.createBufferSource();
+  whiteNoiseNode.buffer = buffer;
+  whiteNoiseNode.loop = true;
+  
+  const gainNode = audioCtx.createGain();
+  
+  // ▼▼▼【ここからが変更点】▼▼▼
+  // ローパスフィルターを作成
+  const filterNode = audioCtx.createBiquadFilter();
+  filterNode.type = 'lowpass';
+  filterNode.frequency.value = 3000; // この値を下げるとさらに重い音になる
+
+  // 接続順を変更: source -> filter -> gain -> destination
+  whiteNoiseNode.connect(filterNode);
+  filterNode.connect(gainNode);
+  // ▲▲▲【ここまでが変更点】▲▲▲
+
+  gainNode.connect(audioCtx.destination);
+  
+  gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 0.1);
+  
+  whiteNoiseNode.start();
+}
+
+function startWhiteNoise() {
+  if (!audioCtx) return;
+  const bufferSize = audioCtx.sampleRate * 1;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const output = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    output[i] = Math.random() * 2 - 1;
+  }
+
+  whiteNoiseNode = audioCtx.createBufferSource();
+  whiteNoiseNode.buffer = buffer;
+  whiteNoiseNode.loop = true;
+  
+  const gainNode = audioCtx.createGain();
+  
+  // ▼▼▼【ここからが変更点】▼▼▼
+  // 既存のローパスフィルター
+  const lowPassFilter = audioCtx.createBiquadFilter();
+  lowPassFilter.type = 'lowpass';
+  lowPassFilter.frequency.value = 1500;
+
+  // 新しくハイパスフィルターを作成
+  const highPassFilter = audioCtx.createBiquadFilter();
+  highPassFilter.type = 'highpass';
+  highPassFilter.frequency.value = 500; // 低音域をカット
+
+  // 接続順を変更: source -> high-pass -> low-pass -> gain -> destination
+  whiteNoiseNode.connect(highPassFilter);
+  highPassFilter.connect(lowPassFilter);
+  lowPassFilter.connect(gainNode);
+  // ▲▲▲【ここまでが変更点】▲▲▲
+
+  gainNode.connect(audioCtx.destination);
+  
+  gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+  // ▼▼▼【変更点】音量を25%に (0.2 * 0.25 = 0.05) ▼▼▼
+  gainNode.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 1);
+  
+  whiteNoiseNode.start();
+}
+
+function stopWhiteNoise() {
+  return new Promise(resolve => {
+    if (!whiteNoiseNode || !whiteNoiseNode.buffer) {
+      resolve();
+      return;
+    }
+    const gainNode = audioCtx.createGain();
+    gainNode.connect(audioCtx.destination);
+    
+    // ▼▼▼【変更点】音量を25%に (0.2 * 0.25 = 0.05) ▼▼▼
+    gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
+
+    try {
+        whiteNoiseNode.disconnect();
+        whiteNoiseNode.connect(gainNode);
+    } catch (e) {
+        // エラーは無視
+    }
+
+    setTimeout(() => {
+      try {
+        whiteNoiseNode.stop();
+      } catch (e) {
+        // エラーは無視
+      }
+      whiteNoiseNode = null;
+      resolve();
+    }, 50);
+  });
 }
 
 function toneNTT(kind) {
@@ -1065,7 +1194,6 @@ async function speakMessage(text) {
 // ==========================================
 // メインループ
 // ==========================================
-
 async function runSystem() {
   if (!scenarioEngine) {
     alert('CSVファイルを先に読み込んでください');
@@ -1081,7 +1209,6 @@ async function runSystem() {
   scenarioEngine.caseIdCounter = 1;
   status.textContent = "ACTIVE";
 
-  let n = 0;
   let lastDiagnosisTime = Date.now();
 
   const caseInterval = setInterval(() => {
@@ -1102,14 +1229,11 @@ async function runSystem() {
 
     let activeCount = scenarioEngine.getVisibleCases().length;
 
-    // 1分経過チェック
     const now = Date.now();
     if (now - lastDiagnosisTime > 60000) {
       lastDiagnosisTime = now;
       if (activeCount === 0) {
-        // ▼▼▼【ここからが変更点】▼▼▼
-        // 事案が0件ならランダムな事案を発生させる（自己診断）
-        const newEvent = scenarioEngine.generateNewCase(n, busyUnits);
+        const newEvent = scenarioEngine.generateNewCase(busyUnits);
         if (newEvent) {
           eventsToProcess.push(newEvent);
           const newCaseId = newEvent.caseId;
@@ -1117,26 +1241,25 @@ async function runSystem() {
           if (newCase) {
             busyUnits.add(newCase.unit);
           }
-          const responseEvent = scenarioEngine.progressCase(newCaseId, n + 0.1, busyUnits);
+          const responseEvent = scenarioEngine.progressCase(newCaseId, busyUnits);
           if (responseEvent) {
             eventsToProcess.push(responseEvent);
           }
         }
-        // ▲▲▲【ここまでが変更点】▲▲▲
       }
     }
 
     activeCount = scenarioEngine.getVisibleCases().length;
     const caseIds = Array.from(scenarioEngine.activeCases.keys());
     for (const caseId of caseIds) {
-      const event = scenarioEngine.progressCase(caseId, n, busyUnits);
+      const event = scenarioEngine.progressCase(caseId, busyUnits);
       if (event) {
         eventsToProcess.push(event);
       }
     }
 
     if (activeCount < 5) {
-      const newEvent = scenarioEngine.generateNewCase(n, busyUnits);
+      const newEvent = scenarioEngine.generateNewCase(busyUnits);
       if (newEvent) {
         eventsToProcess.push(newEvent);
         
@@ -1146,7 +1269,7 @@ async function runSystem() {
           busyUnits.add(newCase.unit);
         }
 
-        const responseEvent = scenarioEngine.progressCase(newCaseId, n + 0.1, busyUnits);
+        const responseEvent = scenarioEngine.progressCase(newCaseId, busyUnits);
         if (responseEvent) {
           eventsToProcess.push(responseEvent);
         }
@@ -1194,25 +1317,36 @@ async function runSystem() {
         }
 
         if (TTS_ENABLED) {
+          ensureAudio();
+          playChirp('start');
+          startWhiteNoise();
+        }
+
+        if (TTS_ENABLED) {
           await Promise.all([
-            typeOut(FIXED_SEED, BASE_CPS, event, msg),
+            typeOut("", BASE_CPS, event, msg),
             speakMessage(event.message)
           ]);
         } else {
-          await typeOut(FIXED_SEED, BASE_CPS, event, msg);
+          await typeOut("", BASE_CPS, event, msg);
         }
-        await sleep(200);
+        
+        if (TTS_ENABLED) {
+          await stopWhiteNoise();
+          playChirp('end');
+        }
+        
+        // ▼▼▼【ここを変更】▼▼▼
+        await sleep(1250); // 200から1250に変更
       }
     }
 
     if (my !== runningToken) { clearInterval(caseInterval); break; }
-
-    const waitTime = eventsToProcess.length > 0 ? 1000 : 800;
+    
+    const waitTime = eventsToProcess.length > 0 ? 5000 : 4000;
     await sleep(waitTime);
-    n++;
   }
 }
-
 // ==========================================
 // イベントリスナー
 // ==========================================
@@ -1228,7 +1362,7 @@ function initializeSystem(csvText) {
         backup: scenarioLoader.paramLists.units_backup || []
     };
 
-    scenarioEngine = new ScenarioEngine(scenarioLoader, FIXED_SEED, unitTypes);
+    scenarioEngine = new ScenarioEngine(scenarioLoader, unitTypes); // seed引数を削除
     
     document.getElementById("syncBtn").disabled = false;
     document.getElementById("caseList").innerHTML = '<div class="no-cases">✅ シナリオ読込完了。システムを起動してください</div>';
