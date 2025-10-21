@@ -1177,7 +1177,7 @@ async function speakMessage(text) {
   utter.voice = chosenVoice || null;
   utter.rate = ttsRate;
   utter.pitch = 1.0;
-  utter.volume = 1.0;
+  utter.volume = 0.25;
 
   return new Promise((resolve) => {
     utter.onend = resolve;
