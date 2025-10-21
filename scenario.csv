@@ -93,7 +93,7 @@ LEVEL,Lv2,,,,,
 
 LEVEL,Lv3,,,,,
   NAME,強盗事件対応,,,,,type=robbery;level=3
-    NODE,1,new_case,0.08,dispatch,本部から{unit}、{zone}、{type_ja}。緊急出動せよ。,
+    NODE,1,new_case,0.08,dispatch,本部から{unit}、{zone}、{type_ja}。緊急出動せよ。,"alert=beep"
       NODE,2,awaiting_response,1.0,enroute,{unit}から本部、了解。現場へ{急行中/緊急走行で向かっております}。,
         NODE,3,default,1.0,on_scene,{unit}から本部、現着。容疑者{#num:1-3}名を{視認/確認}。{#weapons}を所持している模様。,
           NODE,4,rand<0.15,0.15,escalate,{unit}から本部、事案が拡大。{#escalate_reasons}。レベル4に格上げを要請。,
@@ -115,7 +115,7 @@ LEVEL,Lv3,,,,,
             NODE,5,default,1.0,clear,{unit}から本部、容疑者を署へ護送します。,
 
   NAME,ひき逃げ事件,,,,,type=hit_and_run;level=3
-    NODE,1,new_case,0.07,dispatch,本部から全車両、緊急配備。{zone}付近で{type_ja}。該当区域の全車両は直ちに警戒態勢に入れ。,
+    NODE,1,new_case,0.07,dispatch,本部から全車両、緊急配備。{zone}付近で{type_ja}。該当区域の全車両は直ちに警戒態勢に入れ。,"alert=beep"
       NODE,2,awaiting_response,1.0,enroute,{unit}から本部、了解。{zone}周辺を警戒します。,
         NODE,3,rand<0.6,0.6,on_scene,{unit}から本部、該当車両を発見。{#vehicles}、ナンバー{#num:1000-9999}。停止を求めます。,
           NODE,4,rand<0.5,0.5,escape,{unit}から本部、車両が逃走を試みています。{#directions}方向へ追跡中。,
@@ -127,7 +127,7 @@ LEVEL,Lv3,,,,,
         NODE,3,rand<0.4,0.4,clear,{unit}から本部、該当車両発見できず。捜査を継続します。,
 
   NAME,傷害事件,,,,,type=assault;level=3
-    NODE,1,new_case,0.06,dispatch,本部から{unit}、{zone}、{type_ja}の通報。緊急出動せよ。,
+    NODE,1,new_case,0.06,dispatch,本部から{unit}、{zone}、{type_ja}の通報。緊急出動せよ。,"alert=beep"
       NODE,2,awaiting_response,1.0,enroute,{unit}から本部、了解。{zone}へ急行します。,
         NODE,3,default,1.0,on_scene,{unit}から本部、現着。被害者{#num:1-2}名を確認。{#weapons}による傷害の模様。,
           NODE,4,rand<0.45,0.45,on_scene,{unit}から本部、加害者が現場に残存。{#num:1-2}名を確認。,
@@ -144,7 +144,7 @@ LEVEL,Lv3,,,,,
           NODE,4,default,0.55,clear,{unit}から本部、加害者はすでに逃走。被害者からの聴取を実施。捜査を開始します。,
 
   NAME,突発デモ発生,,,,,type=demonstration;level=3
-    NODE,1,new_case,0.05,dispatch,本部から{unit}、{zone}にて突発的なデモ発生の模様。現場の状況を確認せよ。,
+    NODE,1,new_case,0.05,dispatch,本部から{unit}、{zone}にて突発的なデモ発生の模様。現場の状況を確認せよ。,"alert=beep"
       NODE,2,awaiting_response,1.0,enroute,{unit}から本部、了解。{zone}へ向かいます。,
         NODE,3,default,1.0,on_scene,{unit}から本部、現着。参加者およそ{#num:50-200}名。{大きな混乱はなし/指導に従い解散の見込み}。,
           NODE,4,default,0.6,clear,{unit}から本部、デモ隊は解散しました。周辺警戒に移行します。,
@@ -158,7 +158,7 @@ LEVEL,Lv3,,,,,
 
 LEVEL,Lv4,,,,,
   NAME,人質立てこもり事件,,,,,type=hostage;level=4
-    NODE,1,new_case,0.01,dispatch,本部から全車両、緊急事態。{zone}で{type_ja}。最優先で現場へ向かえ。,
+    NODE,1,new_case,0.01,dispatch,本部から全車両、緊急事態。{zone}で{type_ja}。最優先で現場へ向かえ。,"alert=beep"
       NODE,2,awaiting_response,1.0,special_request,本部からSATおよび管区機動隊、{zone}へ至急出動せよ。詳細は{unit}と連携せよ。,add_units=SAT・管区機動隊
         NODE,3,default,1.0,on_scene,SATから本部、現着。管区機動隊と連携し現場を包囲。人質{#num:2-8}名を確認。,
           NODE,4,rand<0.60,0.60,negotiation,SATから本部、犯人と交渉を開始。人質の安全確保を最優先とします。,
@@ -169,20 +169,20 @@ LEVEL,Lv4,,,,,
             NODE,5,default,1.0,clear,SATから本部、制圧完了。人質{#num:2-8}名を救出。犯人{#num:1-2}名を確保。,
 
   NAME,不審物発見,,,,,type=suspicious_object;level=4
-    NODE,1,new_case,0.02,dispatch,本部から{unit}、{zone}で{type_ja}の通報。現場を封鎖せよ。周辺車両は迂回せよ。,
+    NODE,1,new_case,0.02,dispatch,本部から{unit}、{zone}で{type_ja}の通報。現場を封鎖せよ。周辺車両は迂回せよ。,"alert=beep"
       NODE,2,awaiting_response,1.0,enroute,{unit}から本部、了解。現場へ向かいます。,
         NODE,3,default,1.0,on_scene,{unit}から本部、現着。現場を封鎖しました。半径{#num:50-200}メートルを立入禁止とします。,
-          NODE,4,default,1.0,special_request,{unit}から本部、爆発物処理班および管区機動隊の出動を要請します。,add_units=爆発物処理班・管区機動隊
+          NODE,4,default,1.0,special_request,{unit}から本部、爆発物処理班および管区機動隊の出動を要請します。,"escalate_level=4;alert=beep"add_units=爆発物処理班・管区機動隊
             NODE,5,default,1.0,on_scene,爆発物処理班から本部、現着。管区機動隊と連携し現場の封鎖を維持、不審物の確認を開始します。,
               NODE,6,rand<0.65,0.65,clear,爆発物処理班から本部、確認の結果、危険物ではありませんでした。{遺失物/いたずら}と判断。封鎖を解除します。,
               NODE,6,rand<0.30,0.30,clear,爆発物処理班から本部、爆発物を確認。遠隔操作により安全に処理しました。封鎖を解除します。,
               NODE,6,rand<0.05,0.05,clear,爆発物処理班から本部、処理中に小規模な爆発が発生。{負傷者なし/隊員に軽傷}。現場を安全確認後、封鎖を解除します。,
 
   NAME,多数傷病者事案,,,,,type=mass_casualty;level=4
-    NODE,1,new_case,0.01,dispatch,本部から{unit}、{zone}で多数傷病者事案発生。{type_ja}の可能性。至急現場へ向かえ。,
+    NODE,1,new_case,0.01,dispatch,本部から{unit}、{zone}で多数傷病者事案発生。{type_ja}の可能性。至急現場へ向かえ。,"alert=beep"
       NODE,2,awaiting_response,1.0,enroute,{unit}から本部、了解。{zone}へ緊急走行で向かっております。,
-        NODE,3,default,1.0,on_scene,{unit}から本部、現着。{#num:5-15}名の傷病者を確認。トリアージを開始します。,
-          NODE,4,default,1.0,backup,{unit}から本部、大規模応援を要請。事件現場医療派遣チームが必要です。,
+        NODE,3,default,1.0,on_scene,{unit}から本部、現着。{#num:5-15}名の傷病者を確認。応急手当を開始します。,
+          NODE,4,default,1.0,backup,{unit}から本部、大規模応援を要請。事件現場医療派遣チームが必要です。,"alert=beep"
             NODE,5,has_units,1.0,backup_response,本部から管内全車両、{zone}へ応援に向かえ。事件現場医療派遣チームおよび管区機動隊も出動せよ。,add_units=事件現場医療派遣チーム・管区機動隊
               NODE,6,default,1.0,on_scene,事件現場医療派遣チームから本部、現着。{unit}と連携し救護活動を実施します。,
                 NODE,7,default,1.0,clear,{unit}から本部、{backup_unit}と共に全傷病者の搬送完了。重傷者{#num:1-5}名、軽傷者{#num:3-10}名。現場処理完了。,

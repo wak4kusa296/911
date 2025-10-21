@@ -669,12 +669,13 @@ class ScenarioEngine {
     return candidates[0];
   }
 
-  generateNewCase(busyUnits) { // n引数を削除
+  // ▼▼▼【ここから置き換え】▼▼▼
+  generateNewCase(busyUnits) {
     const allScenarios = this.loader.scenarios.flatMap(level => level.scenarios);
     const totalWeight = allScenarios.reduce((sum, s) => sum + s.probability, 0);
     if (totalWeight <= 0) return null;
     
-    const r = Math.random() * totalWeight; // Math.random() に変更
+    const r = Math.random() * totalWeight;
     let cumulative = 0;
     let selectedScenario = allScenarios[0];
     for (const scenario of allScenarios) {
@@ -701,9 +702,9 @@ class ScenarioEngine {
     const availableUnitsForCase = unitPool.filter(u => !busyUnits.has(u));
     if (availableUnitsForCase.length === 0) return null;
     
-    const unit = availableUnitsForCase[Math.floor(Math.random() * availableUnitsForCase.length)]; // Math.random() に変更
+    const unit = availableUnitsForCase[Math.floor(Math.random() * availableUnitsForCase.length)];
     const zoneList = this.loader.paramLists.zones || [];
-    const zone = zoneList[Math.floor(Math.random() * zoneList.length)]; // Math.random() に変更
+    const zone = zoneList[Math.floor(Math.random() * zoneList.length)];
     const caseId = `C${String(this.caseIdCounter++).padStart(4, '0')}`;
     const firstNode = selectedScenario.rootNodes[0];
     
@@ -713,6 +714,14 @@ class ScenarioEngine {
       startTime: Date.now(), awaitingResponse: true, phase: firstNode.phase,
       isVisible: false
     };
+
+    // ★★★ 最初のノードにレベル引き上げ指定があれば、この時点で適用する ★★★
+    if (firstNode.params && firstNode.params.escalate_level) {
+        const newLevel = parseInt(firstNode.params.escalate_level, 10);
+        if (!isNaN(newLevel)) {
+            caseObj.level = newLevel;
+        }
+    }
 
     if (firstNode.params && firstNode.params.add_units) {
         const newUnits = firstNode.params.add_units.split(';');
@@ -725,17 +734,21 @@ class ScenarioEngine {
 
     this.activeCases.set(caseId, caseObj);
     const context = { unit, zone, type_ja: selectedScenario.name };
-    let message = this.parser.parse(firstNode.message, context); // seed引数を削除
+    let message = this.parser.parse(firstNode.message, context);
     message = message.replace(/東京/g, locationName);
     
     return {
-      id: `N${String(this.caseIdCounter++).padStart(6, '0')}`, // nをcaseIdCounterに変更
-      caseId, level: selectedScenario.level,
-      phase: firstNode.phase, zone, unit, message, scenarioName: selectedScenario.name
+      id: `N${String(this.caseIdCounter++).padStart(6, '0')}`,
+      caseId, 
+      level: caseObj.level, // ★更新後の正しいレベルを渡す
+      phase: firstNode.phase, zone, unit, message, scenarioName: selectedScenario.name,
+      params: firstNode.params
     };
   }
+// ▲▲▲【ここまで置き換え】▲▲▲
 
-  progressCase(caseId, busyUnits) { // n引数を削除
+  // ▼▼▼【ここから置き換え】▼▼▼
+  progressCase(caseId, busyUnits) {
     const caseObj = this.activeCases.get(caseId);
     if (!caseObj) return null;
 
@@ -762,6 +775,14 @@ class ScenarioEngine {
     caseObj.currentNode = nextNode;
     caseObj.phase = nextNode.phase;
     caseObj.awaitingResponse = (nextNode.condition === 'awaiting_response');
+
+    // ★★★ レベル引き上げを、この時点で即時適用する ★★★
+    if (nextNode.params && nextNode.params.escalate_level) {
+        const newLevel = parseInt(nextNode.params.escalate_level, 10);
+        if (!isNaN(newLevel)) {
+            caseObj.level = newLevel;
+        }
+    }
 
     if (caseObj.phase === 'clear' && !caseObj.isDeleting) {
       caseObj.isDeleting = true;
@@ -790,16 +811,19 @@ class ScenarioEngine {
       backup_unit: backupUnit || latestBackupUnit
     };
     
-    let message = this.parser.parse(nextNode.message, context); // seed引数を削除
+    let message = this.parser.parse(nextNode.message, context);
     message = message.replace(/東京/g, locationName);
 
     return {
-      id: `N${String(this.caseIdCounter++).padStart(6, '0')}`, // nをcaseIdCounterに変更
-      caseId, level: caseObj.level,
+      id: `N${String(this.caseIdCounter++).padStart(6, '0')}`,
+      caseId, 
+      level: caseObj.level, // ★更新後の正しいレベルを渡す
       phase: nextNode.phase, zone: caseObj.zone,
-      unit: backupUnit || caseObj.unit, message, scenarioName: caseObj.scenario.name
+      unit: backupUnit || caseObj.unit, message, scenarioName: caseObj.scenario.name,
+      params: nextNode.params
     };
   }
+// ▲▲▲【ここまで置き換え】▲▲▲
 
   getAllActiveCases() {
     return Array.from(this.activeCases.values()).filter(c => c.phase !== 'clear');
@@ -1033,9 +1057,9 @@ function stopWhiteNoise() {
 function toneNTT(kind) {
   if (!TTS_ENABLED || !audioCtx) return;
   const p = {
-    pip: { f: 2000, dur: 40, g: 0.03, atk: 0.004, dec: 0.030, rel: 0.030, h2: 0.18 },
-    pop: { f: 500, dur: 100, g: 0.06, atk: 0.006, dec: 0.050, rel: 0.060, h2: 0.20 },
-    peen: { f: 1000, dur: 600, g: 0.06, atk: 0.008, dec: 0.200, rel: 0.300, h2: 0.25 }
+    pip: { f: 2000, dur: 4, g: 0.03, atk: 0.001, dec: 0.030, rel: 0.030, h2: 0.3 },
+    pop: { f: 500, dur: 100, g: 0.06, atk: 0.001, dec: 0.050, rel: 0.060, h2: 1 },
+    peen: { f: 1000, dur: 600, g: 0.06, atk: 0.003, dec: 0.01, rel: 0.003, h2: 1 }
   }[kind];
 
   const ctx = audioCtx, t0 = ctx.currentTime;
@@ -1053,6 +1077,59 @@ function toneNTT(kind) {
   osc.start(t0);
   osc.stop(t0 + (p.dur / 1000) + p.rel + 0.05);
 }
+
+// ▼▼▼【ここからが追加箇所】▼▼▼
+
+// ▼▼▼【ここから置き換え】▼▼▼
+function playEmergencyBeep(durationMs) {
+  if (!TTS_ENABLED || !audioCtx) return Promise.resolve();
+  
+  ensureAudio();
+  
+  return new Promise(resolve => {
+    const t0 = audioCtx.currentTime;
+    const durationSec = durationMs / 1000;
+
+    // 2つの音をまとめるためのメインの音量コントローラー
+    const mainGain = audioCtx.createGain();
+    mainGain.connect(audioCtx.destination);
+    mainGain.gain.value = 0;
+
+    // --- 2つの発振器（オシレーター）を準備 ---
+    const osc1 = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator();
+
+    // 波形を「ノコギリ波(sawtooth)」に。これが刺々しい音の元になります。
+    osc1.type = 'sine';
+    osc2.type = 'sine';
+
+    // 周波数を少しだけズラすことで、うなるような不協和音を作ります。
+    osc1.frequency.setValueAtTime(1000, t0); // 1000Hzの音
+    osc2.frequency.setValueAtTime(1030, t0); // 少し高い1030Hzの音
+
+    // 各オシレーターをメインの音量コントローラーに接続
+    osc1.connect(mainGain);
+    osc2.connect(mainGain);
+
+    // --- 音量の制御 ---
+    const attackTime = 0.005;
+    const releaseTime = 0.01;
+    // 音量を少しだけ上げる (0.1 -> 0.15)
+    mainGain.gain.linearRampToValueAtTime(0.02, t0 + attackTime);
+    mainGain.gain.setValueAtTime(0.02, t0 + durationSec - releaseTime);
+    mainGain.gain.linearRampToValueAtTime(0, t0 + durationSec);
+
+    // --- 再生と停止 ---
+    osc1.start(t0);
+    osc2.start(t0);
+    osc1.stop(t0 + durationSec);
+    osc2.stop(t0 + durationSec);
+
+    // 最後のオシレーターが停止したタイミングで完了を通知
+    osc2.onended = resolve;
+  });
+}
+// ▲▲▲【ここまで置き換え】▲▲▲
 
 function startTimeSignal() {
   if (tickTimer) clearTimeout(tickTimer); // clearIntervalから変更
@@ -1194,6 +1271,8 @@ async function speakMessage(text) {
 // ==========================================
 // メインループ
 // ==========================================
+
+// ▼▼▼【ここから置き換え】▼▼▼
 async function runSystem() {
   if (!scenarioEngine) {
     alert('CSVファイルを先に読み込んでください');
@@ -1210,143 +1289,112 @@ async function runSystem() {
   status.textContent = "ACTIVE";
 
   let lastDiagnosisTime = Date.now();
-
-  const caseInterval = setInterval(() => {
-    if (my !== runningToken) { clearInterval(caseInterval); return; }
-    updateCaseStatus();
-  }, 1000);
   
-  updateCaseStatus();
+  // --- イベント（無線通信）を1つずつ処理するためのヘルパー関数 ---
+  async function processAndDisplayEvent(event) {
+    if (!event) return;
 
-  while (my === runningToken) {
-    const eventsToProcess = [];
+    const caseObj = scenarioEngine.activeCases.get(event.caseId);
+    if (caseObj && event.phase === 'dispatch' && !caseObj.isVisible) {
+      caseObj.isVisible = true;
+    }
+
+    const row = document.createElement("div");
+    row.className = "radio-message";
+    const meta = document.createElement("div");
+    meta.className = "radio-message-meta";
+    const ts = document.createElement("div");
+    ts.className = "msg-time";
+    const ts_now = new Date();
+    ts.textContent = ts_now.toLocaleTimeString("ja-JP", { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const ch = document.createElement("div");
+    ch.className = `msg-level lv${event.level}`;
+    ch.textContent = `LV${event.level}`;
+    const caseTag = document.createElement("div");
+    caseTag.className = "msg-case";
+    caseTag.textContent = event.caseId;
+    meta.append(ts, ch, caseTag);
+    const msg = document.createElement("div");
+    msg.className = "msg-content";
+    row.append(meta, msg);
+    log.appendChild(row);
     
+    if (!userScrolling) {
+      setTimeout(() => { log.scrollTop = log.scrollHeight; }, 50);
+    }
+
+    if (event.params && event.params.alert === 'beep' && TTS_ENABLED) {
+        await playEmergencyBeep(3000);
+        await sleep(500);
+    }
+
+    if (TTS_ENABLED) {
+      ensureAudio();
+      playChirp('start');
+      startWhiteNoise();
+    }
+
+    if (TTS_ENABLED) {
+      await Promise.all([
+        typeOut("", BASE_CPS, event, msg),
+        speakMessage(event.message)
+      ]);
+    } else {
+      await typeOut("", BASE_CPS, event, msg);
+    }
+    
+    if (TTS_ENABLED) {
+      await stopWhiteNoise();
+      playChirp('end');
+    }
+    
+    updateCaseStatus();
+    
+    await sleep(1250);
+  }
+
+
+  // --- メインの動作ループ ---
+  updateCaseStatus();
+  while (my === runningToken) {
+    let eventToProcess = null;
+
     const busyUnits = new Set();
     for (const caseObj of scenarioEngine.activeCases.values()) {
         busyUnits.add(caseObj.unit);
-        caseObj.backupUnits.forEach(u => busyUnits.add(u));
+        busyUnits.add(...caseObj.backupUnits);
     }
 
-    let activeCount = scenarioEngine.getVisibleCases().length;
-
-    const now = Date.now();
-    if (now - lastDiagnosisTime > 60000) {
-      lastDiagnosisTime = now;
-      if (activeCount === 0) {
-        const newEvent = scenarioEngine.generateNewCase(busyUnits);
-        if (newEvent) {
-          eventsToProcess.push(newEvent);
-          const newCaseId = newEvent.caseId;
-          const newCase = scenarioEngine.activeCases.get(newCaseId);
-          if (newCase) {
-            busyUnits.add(newCase.unit);
-          }
-          const responseEvent = scenarioEngine.progressCase(newCaseId, busyUnits);
-          if (responseEvent) {
-            eventsToProcess.push(responseEvent);
-          }
-        }
-      }
-    }
-
-    activeCount = scenarioEngine.getVisibleCases().length;
+    // 優先度1: 既存事案の進行を試みる
     const caseIds = Array.from(scenarioEngine.activeCases.keys());
     for (const caseId of caseIds) {
-      const event = scenarioEngine.progressCase(caseId, busyUnits);
-      if (event) {
-        eventsToProcess.push(event);
+      eventToProcess = scenarioEngine.progressCase(caseId, busyUnits);
+      if (eventToProcess) {
+        break; // 進行できる事案が見つかったらループを抜ける
       }
     }
 
-    if (activeCount < 5) {
-      const newEvent = scenarioEngine.generateNewCase(busyUnits);
-      if (newEvent) {
-        eventsToProcess.push(newEvent);
-        
-        const newCaseId = newEvent.caseId;
-        const newCase = scenarioEngine.activeCases.get(newCaseId);
-        if (newCase) {
-          busyUnits.add(newCase.unit);
-        }
-
-        const responseEvent = scenarioEngine.progressCase(newCaseId, busyUnits);
-        if (responseEvent) {
-          eventsToProcess.push(responseEvent);
-        }
+    // 優先度2: 進行中の事案がなければ、新規事案の発生を試みる
+    if (!eventToProcess) {
+      let activeCount = scenarioEngine.getVisibleCases().length;
+      const now = Date.now();
+      if (activeCount < 5 || now - lastDiagnosisTime > 60000) {
+        if (activeCount === 0) lastDiagnosisTime = now;
+        eventToProcess = scenarioEngine.generateNewCase(busyUnits);
       }
     }
     
-    if (eventsToProcess.length > 0) {
-      for (const event of eventsToProcess) {
-        if (my !== runningToken) { clearInterval(caseInterval); return; }
-
-        const caseObj = scenarioEngine.activeCases.get(event.caseId);
-        if (caseObj && event.phase === 'dispatch' && !caseObj.isVisible) {
-          caseObj.isVisible = true;
-        }
-
-        const row = document.createElement("div");
-        row.className = "radio-message";
-
-        const meta = document.createElement("div");
-        meta.className = "radio-message-meta";
-
-        const ts = document.createElement("div");
-        ts.className = "msg-time";
-        const ts_now = new Date();
-        ts.textContent = ts_now.toLocaleTimeString("ja-JP", { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-        const ch = document.createElement("div");
-        ch.className = `msg-level lv${event.level}`;
-        ch.textContent = `LV${event.level}`;
-
-        const caseTag = document.createElement("div");
-        caseTag.className = "msg-case";
-        caseTag.textContent = event.caseId;
-
-        meta.append(ts, ch, caseTag);
-
-        const msg = document.createElement("div");
-        msg.className = "msg-content";
-
-        row.append(meta, msg);
-        log.appendChild(row);
-        
-        if (!userScrolling) {
-          setTimeout(() => { log.scrollTop = log.scrollHeight; }, 50);
-        }
-
-        if (TTS_ENABLED) {
-          ensureAudio();
-          playChirp('start');
-          startWhiteNoise();
-        }
-
-        if (TTS_ENABLED) {
-          await Promise.all([
-            typeOut("", BASE_CPS, event, msg),
-            speakMessage(event.message)
-          ]);
-        } else {
-          await typeOut("", BASE_CPS, event, msg);
-        }
-        
-        if (TTS_ENABLED) {
-          await stopWhiteNoise();
-          playChirp('end');
-        }
-        
-        // ▼▼▼【ここを変更】▼▼▼
-        await sleep(1250); // 200から1250に変更
-      }
+    // 処理すべきイベントが見つかった場合、それを表示して待機
+    if (eventToProcess) {
+      await processAndDisplayEvent(eventToProcess);
+    } else {
+      // 何も起きなかった場合は、少し待機してUIを更新
+      updateCaseStatus();
+      await sleep(1000);
     }
-
-    if (my !== runningToken) { clearInterval(caseInterval); break; }
-    
-    const waitTime = eventsToProcess.length > 0 ? 5000 : 4000;
-    await sleep(waitTime);
   }
 }
+// ▲▲▲【ここまで置き換え】▲▲▲
 // ==========================================
 // イベントリスナー
 // ==========================================
@@ -1362,7 +1410,7 @@ function initializeSystem(csvText) {
         backup: scenarioLoader.paramLists.units_backup || []
     };
 
-    scenarioEngine = new ScenarioEngine(scenarioLoader, unitTypes); // seed引数を削除
+    scenarioEngine = new ScenarioEngine(scenarioLoader, unitTypes);
     
     document.getElementById("syncBtn").disabled = false;
     document.getElementById("caseList").innerHTML = '<div class="no-cases">✅ シナリオ読込完了。システムを起動してください</div>';
@@ -1392,7 +1440,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById("caseList").innerHTML = '<div class="no-cases">❌ scenario.csvの読込に失敗しました。</div>';
   }
 
-  // ▼▼▼ 操作パネルのトグル機能を追加 ▼▼▼
   document.getElementById("toggleControls").addEventListener("click", () => {
     const controlPanel = document.getElementById("controlPanel");
     controlPanel.classList.toggle("hidden");
