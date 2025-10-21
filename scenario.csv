@@ -40,10 +40,10 @@ LEVEL,Lv1,,,,,
             NODE,5,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
 LEVEL,Lv2,,,,,
   NAME,交通事故対応,,,,,type=traffic_accident;level=2
-    NODE,1,new_case,0.20,派遣要請,{commander}から{unit}、{zone}付近、{type_ja}。対応願いたい。,need-response=true
+    NODE,1,new_case,1.20,派遣要請,{commander}から{unit}、{zone}付近、{type_ja}。対応願いたい。,need-response=true
       NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、{zone}へ向かっております。,
         NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。{負傷者{#num:1-3}名を確認/車両{#num:2-4}台が関与/状況確認中}。,
-          NODE,4,rand<0.35,0.35,応援要請,{unit}から{commander}、{zone}にて応援要請。{救急車/レッカー車}が必要です。,need-response=true
+          NODE,4,rand<0.20,0.20,応援要請,{unit}から{commander}、{zone}にて応援要請。人員の追加が必要です。,need-response=true
               NODE,5,has_units,1.0,応援派遣済み,{commander}から{backup_unit}、{zone}へ応援に向かえ。,
                 NODE,6,default,1.0,臨場済み,{backup_unit}から{commander}、現着。{unit}と連携します。,
                   NODE,7,default,1.0,処理完了,{unit}から{commander}、{backup_unit}と共に処理完了。現場を引き渡します。,clear=true
@@ -154,7 +154,7 @@ LEVEL,Lv4,,,,,
           NODE,4,rand<0.40,0.40,強行突破,SATから{commander}、人質に危険が迫っている。直ちに強行突入します。,
             NODE,5,default,1.0,処理完了,SATから{commander}、制圧完了。人質{#num:2-8}名を救出。犯人{#num:1-2}名を確保。,clear=true
   NAME,不審物発見,,,,,type=suspicious_object;level=3
-    NODE,1,new_case,1,派遣要請,{commander}から{unit}、{zone}で{type_ja}の通報。現場を封鎖せよ。周辺車両は迂回せよ。,"alert=beep;need-response=true"
+    NODE,1,new_case,0.02,派遣要請,{commander}から{unit}、{zone}で{type_ja}の通報。現場を封鎖せよ。周辺車両は迂回せよ。,"alert=beep;need-response=true"
       NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。現場へ向かいます。,
         NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。現場を封鎖しました。半径{#num:50-200}メートルを立入禁止とします。,
           NODE,4,default,1.0,特殊部隊派遣要請,{unit}から{commander}、爆発物処理班および管区機動隊の出動を要請します。,"add_units=爆発物処理班・管区機動隊;escalate_level=4;alert=beep;need-response=true"
@@ -163,7 +163,7 @@ LEVEL,Lv4,,,,,
               NODE,6,rand<0.30,0.30,処理完了,爆発物処理班から{commander}、爆発物を確認。遠隔操作により安全に処理しました。封鎖を解除します。,clear=true
               NODE,6,rand<0.05,0.05,処理完了,爆発物処理班から{commander}、処理中に小規模な爆発が発生。{負傷者なし/隊員に軽傷}。現場を安全確認後、封鎖を解除します。,clear=true
   NAME,多数傷病者事案,,,,,type=mass_casualty;level=4
-    NODE,1,new_case,0.01,派遣要請,{commander}から{unit}、{zone}で多数傷病者事案発生。{type_ja}の可能性。至急現場へ向かえ。,"alert=beep;need-response=true"
+    NODE,1,new_case,0.02,派遣要請,{commander}から{unit}、{zone}で多数傷病者事案発生。{type_ja}の可能性。至急現場へ向かえ。,"alert=beep;need-response=true"
       NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}へ緊急走行で向かっております。,
         NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。{#num:5-15}名の傷病者を確認。応急手当を開始します。,
           NODE,4,default,1.0,応援要請,{unit}から{commander}、大規模応援を要請。事件現場医療派遣チームが必要です。,"alert=beep;need-response=true"

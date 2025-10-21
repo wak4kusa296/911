@@ -1396,20 +1396,22 @@ async function runSystem() {
   log.innerHTML = "";
   scenarioEngine.activeCases.clear();
   scenarioEngine.caseIdCounter = 1;
-  scenarioEngine.nodeIdCounter = 1; // ノードカウンターもリセット
+  scenarioEngine.nodeIdCounter = 1;
   status.textContent = "ACTIVE";
   
-  // 即時応答が必要な事案IDを保持する変数
   let pendingResponseCaseId = null; 
 
   async function processAndDisplayEvent(event) {
     if (!event) return;
     const caseObj = scenarioEngine.activeCases.get(event.caseId);
-    if (caseObj && !caseObj.isVisible) {
-      caseObj.isVisible = true;
-    }
+    
+    // ▼▼▼【変更箇所】この事案が新規（まだパネルに表示されていない）かどうかを判定 ▼▼▼
+    const isNewCase = caseObj && !caseObj.isVisible;
 
-    updateCaseStatus();
+    // ▼▼▼【変更箇所】既存事案の場合のみ、先にパネルの状態を更新（フェーズ変更などを反映） ▼▼▼
+    if (!isNewCase) {
+        updateCaseStatus();
+    }
 
     const row = document.createElement("div");
     row.className = "radio-message";
@@ -1456,18 +1458,23 @@ async function runSystem() {
       playChirp('end');
     }
 
-    // この通信に応答が必要な場合、フラグを立てる
+    // ▼▼▼【変更箇所】新規事案の場合、無線の表示が終わったこのタイミングでパネルに表示する ▼▼▼
+    if (isNewCase) {
+        caseObj.isVisible = true;
+        updateCaseStatus();
+    }
+
     if (event.params && event.params['need-response'] === 'true') {
         pendingResponseCaseId = event.caseId;
     }
 
-    // 事案が完了した場合、アクティブリストから削除
     if (event.params && event.params.clear === 'true') {
       scenarioEngine.activeCases.delete(event.caseId);
       updateCaseStatus(); 
     }
     
-    await sleep(1250);
+    const randomDelay = Math.random() * 4000 + 2000;
+    await sleep(randomDelay);
   }
 
   updateCaseStatus();
@@ -1480,36 +1487,43 @@ async function runSystem() {
         busyUnits.add(caseObj.unit);
         busyUnits.add(...caseObj.backupUnits);
     }
-
+    
     if (pendingResponseCaseId) {
-      // 応答待ちの事案があれば、最優先で処理
       eventToProcess = scenarioEngine.progressCase(pendingResponseCaseId, busyUnits);
-      
-      // 応答イベントを正常に取得できたら、フラグを解除してランダム処理に戻す
       if (eventToProcess) {
         pendingResponseCaseId = null;
       }
-    } else {
-      // 応答待ちがなければ、ランダムに処理
-      const activeCaseIds = scenarioEngine.getVisibleCases().map(c => c.id);
+    } 
+    
+    if (!eventToProcess) {
+      const activeCases = scenarioEngine.getVisibleCases();
+      const activeCaseCount = activeCases.length;
 
-      // 事案IDの配列をシャッフルして、処理順をランダム化
-      for (let i = activeCaseIds.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [activeCaseIds[i], activeCaseIds[j]] = [activeCaseIds[j], activeCaseIds[i]];
-      }
-
-      // ランダムな順序で既存事案の進行を試みる
-      for (const caseId of activeCaseIds) {
-        eventToProcess = scenarioEngine.progressCase(caseId, busyUnits);
-        if (eventToProcess) {
-          break; // 処理するイベントが見つかった
-        }
-      }
-
-      // 既存事案が進まなかった場合、上限（5件）未満なら新規事案を発生させる
-      if (!eventToProcess && scenarioEngine.getVisibleCases().length < 5) {
+      if (activeCaseCount < 5 && Math.random() < 0.5) {
         eventToProcess = scenarioEngine.generateNewCase(busyUnits);
+      }
+
+      if (!eventToProcess && activeCaseCount > 0) {
+        let caseIdToProgress = null;
+        activeCases.sort((a, b) => a.startTime - b.startTime);
+        
+        const oldestCase = activeCases[0];
+        const otherCases = activeCases.slice(1);
+
+        if (Math.random() < 0.5) {
+          caseIdToProgress = oldestCase.id;
+        } else {
+          if (otherCases.length > 0) {
+            const randomOtherCase = otherCases[Math.floor(Math.random() * otherCases.length)];
+            caseIdToProgress = randomOtherCase.id;
+          } else {
+            caseIdToProgress = oldestCase.id;
+          }
+        }
+        
+        if (caseIdToProgress) {
+            eventToProcess = scenarioEngine.progressCase(caseIdToProgress, busyUnits);
+        }
       }
     }
 
@@ -1517,7 +1531,7 @@ async function runSystem() {
       await processAndDisplayEvent(eventToProcess);
     } else {
       updateCaseStatus();
-      await sleep(1000); // 処理するイベントがない場合は待機
+      await sleep(1000); 
     }
   }
 }
