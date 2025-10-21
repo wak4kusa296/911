@@ -5,6 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>通信指令観測システム</title>
+  <meta name="theme-color" content="#1a1a1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="指令システム">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Kosugi&family=M+PLUS+1p:wght@300;500;700&display=swap" rel="stylesheet">
@@ -702,6 +708,7 @@ class ScenarioEngine {
     this.unitTypes = unitTypes;
     this.activeCases = new Map();
     this.caseIdCounter = 1;
+    this.nodeIdCounter = 1;
   }
 
   evaluateCondition(condition, caseState) {
@@ -732,7 +739,7 @@ class ScenarioEngine {
     return candidates[0];
   }
 
- generateNewCase(busyUnits) {
+  generateNewCase(busyUnits) {
     const allScenarios = this.loader.scenarios.flatMap(level => level.scenarios);
     const totalWeight = allScenarios.reduce((sum, s) => sum + s.probability, 0);
     if (totalWeight <= 0) return null;
@@ -798,7 +805,9 @@ class ScenarioEngine {
     let message = this.parser.parse(firstNode.message, context);
     
     return {
-      id: `N${String(this.caseIdCounter++).padStart(6, '0')}`,
+      // ▼▼▼【変更箇所】 caseIdCounter を nodeIdCounter に変更 ▼▼▼
+      id: `N${String(this.nodeIdCounter++).padStart(6, '0')}`,
+      // ▲▲▲【変更箇所】 ここまで ▲▲▲
       caseId, 
       level: caseObj.level,
       phase: firstNode.phase, zone, unit, message, scenarioName: selectedScenario.name,
@@ -809,10 +818,6 @@ class ScenarioEngine {
   progressCase(caseId, busyUnits) {
     const caseObj = this.activeCases.get(caseId);
     if (!caseObj) return null;
-
-    if (caseObj.isDeleting) {
-      return null;
-    }
 
     const availableBackupUnits = (this.unitTypes.backup || []).filter(u => !busyUnits.has(u));
     const caseState = {
@@ -841,11 +846,6 @@ class ScenarioEngine {
         }
     }
 
-    if (caseObj.phase === 'clear' && !caseObj.isDeleting) {
-      caseObj.isDeleting = true;
-      setTimeout(() => this.activeCases.delete(caseId), 5000);
-    }
-
     if (nextNode.params && nextNode.params.add_units) {
         const newUnits = nextNode.params.add_units.split(';');
         newUnits.forEach(unitName => {
@@ -872,7 +872,9 @@ class ScenarioEngine {
     let message = this.parser.parse(nextNode.message, context);
 
     return {
-      id: `N${String(this.caseIdCounter++).padStart(6, '0')}`,
+      // ▼▼▼【変更箇所】 caseIdCounter を nodeIdCounter に変更 ▼▼▼
+      id: `N${String(this.nodeIdCounter++).padStart(6, '0')}`,
+      // ▲▲▲【変更箇所】 ここまで ▲▲▲
       caseId, 
       level: caseObj.level,
       phase: nextNode.phase, zone: caseObj.zone,
@@ -1379,6 +1381,7 @@ async function speakMessage(text, isTest = false) {
     }
   });
 }
+
 // ==========================================
 // メインループ
 // ==========================================
@@ -1393,15 +1396,21 @@ async function runSystem() {
   log.innerHTML = "";
   scenarioEngine.activeCases.clear();
   scenarioEngine.caseIdCounter = 1;
+  scenarioEngine.nodeIdCounter = 1; // ノードカウンターもリセット
   status.textContent = "ACTIVE";
-  let lastDiagnosisTime = Date.now();
   
+  // 即時応答が必要な事案IDを保持する変数
+  let pendingResponseCaseId = null; 
+
   async function processAndDisplayEvent(event) {
     if (!event) return;
     const caseObj = scenarioEngine.activeCases.get(event.caseId);
     if (caseObj && !caseObj.isVisible) {
       caseObj.isVisible = true;
     }
+
+    updateCaseStatus();
+
     const row = document.createElement("div");
     row.className = "radio-message";
     if (event.params && event.params.alert === 'beep') {
@@ -1424,6 +1433,7 @@ async function runSystem() {
     msg.className = "msg-content";
     row.append(meta, msg);
     log.appendChild(row);
+
     if (event.params && event.params.alert === 'beep' && TTS_ENABLED) {
         await playEmergencyBeep(3000);
         await sleep(500);
@@ -1445,11 +1455,24 @@ async function runSystem() {
       await stopWhiteNoise();
       playChirp('end');
     }
-    updateCaseStatus();
+
+    // この通信に応答が必要な場合、フラグを立てる
+    if (event.params && event.params['need-response'] === 'true') {
+        pendingResponseCaseId = event.caseId;
+    }
+
+    // 事案が完了した場合、アクティブリストから削除
+    if (event.params && event.params.clear === 'true') {
+      scenarioEngine.activeCases.delete(event.caseId);
+      updateCaseStatus(); 
+    }
+    
     await sleep(1250);
   }
 
   updateCaseStatus();
+
+  // メインシステムループ
   while (my === runningToken) {
     let eventToProcess = null;
     const busyUnits = new Set();
@@ -1457,27 +1480,44 @@ async function runSystem() {
         busyUnits.add(caseObj.unit);
         busyUnits.add(...caseObj.backupUnits);
     }
-    const caseIds = Array.from(scenarioEngine.activeCases.keys());
-    for (const caseId of caseIds) {
-      eventToProcess = scenarioEngine.progressCase(caseId, busyUnits);
+
+    if (pendingResponseCaseId) {
+      // 応答待ちの事案があれば、最優先で処理
+      eventToProcess = scenarioEngine.progressCase(pendingResponseCaseId, busyUnits);
+      
+      // 応答イベントを正常に取得できたら、フラグを解除してランダム処理に戻す
       if (eventToProcess) {
-        break;
+        pendingResponseCaseId = null;
       }
-    }
-    if (!eventToProcess) {
-      let activeCount = scenarioEngine.getVisibleCases().length;
-      const now = Date.now();
-      // 5件未満の時のみ新規事案を生成
-      if (activeCount < 5) {
-        if (activeCount === 0) lastDiagnosisTime = now;
+    } else {
+      // 応答待ちがなければ、ランダムに処理
+      const activeCaseIds = scenarioEngine.getVisibleCases().map(c => c.id);
+
+      // 事案IDの配列をシャッフルして、処理順をランダム化
+      for (let i = activeCaseIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [activeCaseIds[i], activeCaseIds[j]] = [activeCaseIds[j], activeCaseIds[i]];
+      }
+
+      // ランダムな順序で既存事案の進行を試みる
+      for (const caseId of activeCaseIds) {
+        eventToProcess = scenarioEngine.progressCase(caseId, busyUnits);
+        if (eventToProcess) {
+          break; // 処理するイベントが見つかった
+        }
+      }
+
+      // 既存事案が進まなかった場合、上限（5件）未満なら新規事案を発生させる
+      if (!eventToProcess && scenarioEngine.getVisibleCases().length < 5) {
         eventToProcess = scenarioEngine.generateNewCase(busyUnits);
       }
     }
+
     if (eventToProcess) {
       await processAndDisplayEvent(eventToProcess);
     } else {
       updateCaseStatus();
-      await sleep(1000);
+      await sleep(1000); // 処理するイベントがない場合は待機
     }
   }
 }
@@ -1668,6 +1708,14 @@ function toggleTTS() {
 // 両方のボタンに同じ関数を割り当て
 document.getElementById("ttsToggle").addEventListener("click", toggleTTS);
 document.getElementById("ttsToggle2").addEventListener("click", toggleTTS);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js')
+      .then(reg => console.log('Service Worker registered'))
+      .catch(err => console.log('Service Worker registration failed'));
+  });
+}
 
 </script>
 </body>
