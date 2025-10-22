@@ -1,7 +1,7 @@
 {
-  "name": "通信指令観測システム",
+  "name": "通信指令シミュレータ",
   "short_name": "指令システム",
-  "description": "リアルタイム通信指令観測システム",
+  "description": "リアルタイム通信指令シミュレータ",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#1a1a1a",

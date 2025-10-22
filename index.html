@@ -1119,6 +1119,13 @@ progressCase(caseId, busyUnits) {
     console.log('  📋 nextNode.message:', nextNode.message.substring(0, 50) + '...');
     console.log('  📋 nextNode.params:', nextNode.params);
 
+    // ▼▼▼【追加】has_units条件でbackup_unitが必要だが利用不可の場合は待機 ▼▼▼
+    if (nextNode.condition === 'has_units' && availableBackupUnits.length === 0) {
+      console.log('  ⏸️  has_units条件: backup_unitが利用可能になるまで待機します');
+      return null;
+    }
+    // ▲▲▲【追加ここまで】▲▲▲
+
     // --- backup-all発令中の他事案待機ロジック ---
     // backup-all発令事案自体は進める
     // backupユニットを必要としないノードも進める
@@ -1215,10 +1222,28 @@ progressCase(caseId, busyUnits) {
       commander: commanderName
     };
 
-    if (caseObj.backupUnits && caseObj.backupUnits.length > 0) {
+    // ▼▼▼【変更】backup_unitの割り当てロジックを改善 ▼▼▼
+    // has_units条件かつbackup_unitが必要な場合、利用可能なbackup_unitからランダムに1台選択
+    if (nextNode.condition === 'has_units' && nextNode.message.includes('{backup_unit}')) {
+      if (availableBackupUnits.length > 0) {
+        // ランダムに1台選択
+        const selectedBackupUnit = availableBackupUnits[Math.floor(Math.random() * availableBackupUnits.length)];
+        
+        // まだ割り当てられていない場合のみ追加
+        if (!caseObj.backupUnits.includes(selectedBackupUnit)) {
+          caseObj.backupUnits.push(selectedBackupUnit);
+          console.log('  ➕ 新しいbackup_unitを割り当て:', selectedBackupUnit);
+        }
+        
+        context.backup_unit = selectedBackupUnit;
+        console.log('  📋 backup_unit context:', context.backup_unit);
+      }
+    } else if (caseObj.backupUnits && caseObj.backupUnits.length > 0) {
+      // has_units以外で既にbackup_unitが割り当てられている場合
       context.backup_unit = caseObj.backupUnits[0];
-      console.log('  📋 backup_unit context:', context.backup_unit);
+      console.log('  📋 backup_unit context (既存):', context.backup_unit);
     }
+    // ▲▲▲【変更ここまで】▲▲▲
 
     let message = this.parser.parse(nextNode.message, context);
 
@@ -1243,7 +1268,7 @@ progressCase(caseId, busyUnits) {
       params: nextNode.params
     };
   }
-  
+
   getAllActiveCases() {
     return Array.from(this.activeCases.values()).filter(c => c.phase !== 'clear');
   }
@@ -1257,32 +1282,44 @@ progressCase(caseId, busyUnits) {
 // UI更新
 // ==========================================
 
-// ▼▼▼【ここから追加】▼▼▼
+// ▼▼▼【変更】requestAnimationFrameからsetIntervalに変更 ▼▼▼
+let timerInterval = null;
+
 function updateTimers() {
-  const now = Date.now();
-  // data-start-time 属性を持つすべての事案カードを取得
-  document.querySelectorAll('.case-card[data-start-time]').forEach(card => {
-    const timeEl = card.querySelector('.case-time');
-    // data属性から開始時刻を取得
-    const startTime = parseInt(card.dataset.startTime, 10);
-    
-    if (timeEl && startTime) {
-      const elapsedMs = now - startTime;
-      const totalSeconds = Math.floor(elapsedMs / 1000);
-      const minutes = Math.floor(totalSeconds / 60);
-      const seconds = totalSeconds % 60;
-      // ミリ秒を100分の1秒単位に変換
-      const centiseconds = Math.floor((elapsedMs % 1000) / 10);
-
-      timeEl.textContent = `${minutes}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
-    }
-  });
+  // 既存のタイマーがあれば停止
+  if (timerInterval) {
+    clearInterval(timerInterval);
+  }
   
-  // 次の描画フレームで自身を再度呼び出し、ループさせる
-  requestAnimationFrame(updateTimers);
+  // setIntervalで50msごとに更新
+  timerInterval = setInterval(() => {
+    const now = Date.now();
+    document.querySelectorAll('.case-card[data-start-time]').forEach(card => {
+      const timeEl = card.querySelector('.case-time');
+      const startTime = parseInt(card.dataset.startTime, 10);
+      
+      if (timeEl && startTime) {
+        const elapsedMs = now - startTime;
+        const totalSeconds = Math.floor(elapsedMs / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        const centiseconds = Math.floor((elapsedMs % 1000) / 10);
+        timeEl.textContent = `${minutes}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
+      }
+    });
+  }, 50);
+  
+  console.log('✅ タイマー起動（setInterval版）');
 }
-// ▲▲▲【ここまで追加】▲▲▲
 
+function stopTimers() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    console.log('⏹️ タイマー停止');
+  }
+}
+// ▲▲▲【変更ここまで】▲▲▲
 function updateCaseStatus() {
   const el = document.getElementById("caseList");
   if (!scenarioEngine) {
@@ -1297,34 +1334,64 @@ function updateCaseStatus() {
   }
 
   active.sort((a, b) => b.level - a.level);
-  el.innerHTML = active.map(c => {
-    const t = Math.floor((Date.now() - c.startTime) / 1000);
-    const m = Math.floor(t / 60), s = t % 60;
-    
-    // ★★★ 修正：プライマリとバックアップを区別せず、全ユニットを均等に表示 ★★★
-    const allUnits = [c.unit, ...c.backupUnits].filter(u => u); // nullやundefinedを除外
+  
+  // 既存のカードをMapで管理
+  const existingCardsMap = new Map();
+  el.querySelectorAll('.case-card').forEach(card => {
+    const caseId = card.querySelector('.case-id')?.textContent;
+    if (caseId) {
+      existingCardsMap.set(caseId, card);
+    }
+  });
+  
+  const fragment = document.createDocumentFragment();
+  
+  active.forEach(c => {
+    const allUnits = [c.unit, ...c.backupUnits].filter(u => u);
     const unitsStr = allUnits.join('・');
-    
     const levelClass = `lv${c.level}`;
     
-    return `<div class="case-card" data-start-time="${c.startTime}">
-      <div class="case-header">
-        <span class="level-badge ${levelClass}">LV${c.level}</span>
-        <span class="case-id">${c.id}</span>
-        <span class="case-type">${c.scenario.name}</span>
-      </div>
-      <div class="case-body">
-        <div class="case-info-row"><span class="info-label">地区:</span><span class="info-value">${c.zone}</span></div>
-        <div class="case-info-row"><span class="info-label">状態:</span><span class="info-value">${c.phase}</span></div>
-      </div>
-      <div class="case-footer">
-        <span class="case-units">${unitsStr}</span>
-        <span class="case-time">${m}:${String(s).padStart(2, '0')}</span>
-      </div>
-    </div>`;
-  }).join('');
+    let card = existingCardsMap.get(c.id);
+    
+    if (card) {
+      // 既存カードを更新（case-time以外）
+      card.querySelector('.level-badge').className = `level-badge ${levelClass}`;
+      card.querySelector('.level-badge').textContent = `LV${c.level}`;
+      card.querySelector('.case-type').textContent = c.scenario.name;
+      card.querySelector('.case-info-row:nth-child(1) .info-value').textContent = c.zone;
+      card.querySelector('.case-info-row:nth-child(2) .info-value').textContent = c.phase;
+      card.querySelector('.case-units').textContent = unitsStr;
+      // ★ case-timeは触らない！updateTimers()に任せる ★
+      
+      existingCardsMap.delete(c.id);
+    } else {
+      // 新規カードを作成
+      card = document.createElement('div');
+      card.className = 'case-card';
+      card.setAttribute('data-start-time', c.startTime);
+      card.innerHTML = `
+        <div class="case-header">
+          <span class="level-badge ${levelClass}">LV${c.level}</span>
+          <span class="case-id">${c.id}</span>
+          <span class="case-type">${c.scenario.name}</span>
+        </div>
+        <div class="case-body">
+          <div class="case-info-row"><span class="info-label">地区:</span><span class="info-value">${c.zone}</span></div>
+          <div class="case-info-row"><span class="info-label">状態:</span><span class="info-value">${c.phase}</span></div>
+        </div>
+        <div class="case-footer">
+          <span class="case-units">${unitsStr}</span>
+          <span class="case-time">0:00.00</span>
+        </div>
+      `;
+    }
+    
+    fragment.appendChild(card);
+  });
+  
+  el.innerHTML = '';
+  el.appendChild(fragment);
 }
-
 
 // ==========================================
 // ユーティリティ
@@ -2080,8 +2147,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       
       // ▼▼▼ 【重要】シナリオ読み込み成功後、必ず自動起動 ▼▼▼
       console.log('[System] Auto-starting system...');
+      updateTimers(); // ← ここに移動（runSystemの前）
       await runSystem();
-      
     } else {
       document.getElementById("caseList").innerHTML =
         '<div class="no-cases">❌ scenario.csvの読込に失敗しました。</div>';
