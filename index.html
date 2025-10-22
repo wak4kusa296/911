@@ -521,25 +521,25 @@ const SETTINGS_KEY = 'simulatorSettings';
  */
 function saveSettings() {
   const settings = {
-    commanderName: document.getElementById('commanderInput').value,
-    ttsEnabled: TTS_ENABLED,
-    voiceIndex: document.getElementById('voiceSel').value,
-    ttsRate: document.getElementById('rateSlider').value,
-    masterVolume: document.getElementById('masterVolumeSlider').value,
-    ttsVolume: document.getElementById('ttsVolumeSlider').value,
-    sfxVolume: document.getElementById('sfxVolumeSlider').value,
-    noiseVolume: document.getElementById('noiseVolumeSlider').value,
-    isSpecialAlertMode: isSpecialAlertMode // ▼▼▼【追加】特別警戒モードの状態
+    commanderName: document.getElementById('commanderInput').value.trim() || "本部",
+    ttsRate: parseFloat(document.getElementById('rateSlider').value),
+    masterVolume: parseFloat(document.getElementById('masterVolumeSlider').value),
+    ttsVolume: parseFloat(document.getElementById('ttsVolumeSlider').value),
+    sfxVolume: parseFloat(document.getElementById('sfxVolumeSlider').value),
+    noiseVolume: parseFloat(document.getElementById('noiseVolumeSlider').value),
+    voiceIndex: parseInt(document.getElementById('voiceSel').value) || 0,
+    ttsEnabled: TTS_ENABLED, // ★★★ これが保存されているか確認 ★★★
+    isSpecialAlertMode: isSpecialAlertMode
   };
-  sessionStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); // ★★★ sessionStorage → localStorage ★★★
 }
-
-
 /**
  * sessionStorageから設定を読み込み、UIに復元します。
  */
+
 function loadSettings() {
-  const savedSettings = sessionStorage.getItem(SETTINGS_KEY);
+  const savedSettings = localStorage.getItem(SETTINGS_KEY);
   if (!savedSettings) {
     // 保存された設定がない場合、タイトルだけ初期設定
     const commanderInput = document.getElementById("commanderInput");
@@ -548,21 +548,22 @@ function loadSettings() {
     const sliders = document.querySelectorAll('.rate-slider, #voiceSel');
     sliders.forEach(el => el.classList.add('disabled'));
     return;
-  };
+  }
 
   try {
     const settings = JSON.parse(savedSettings);
 
-    // 本部の名称を復元
+    // ★★★ 本部の名称を復元（グローバル変数も更新） ★★★
     const commanderInput = document.getElementById('commanderInput');
-    commanderInput.value = settings.commanderName || "本部";
-    commanderInput.dispatchEvent(new Event('input'));
+    commanderName = settings.commanderName || "本部";
+    commanderInput.value = commanderName;
+    document.getElementById("systemTitle").textContent = `${commanderName}通信指令観測システム`;
 
-    // 各種スライダーの値を復元
+    // ★★★ 各種スライダーの値を復元（実際のシステム変数も更新） ★★★
     const sliders = {
-      rateSlider: { valueId: 'rateValue', key: 'ttsRate', fixed: 1 },
+      rateSlider: { valueId: 'rateValue', key: 'ttsRate', fixed: 1, globalVar: 'ttsRate' },
       masterVolumeSlider: { valueId: 'masterVolumeValue', key: 'masterVolume', fixed: 2 },
-      ttsVolumeSlider: { valueId: 'ttsVolumeValue', key: 'ttsVolume', fixed: 2 },
+      ttsVolumeSlider: { valueId: 'ttsVolumeValue', key: 'ttsVolume', fixed: 2, globalVar: 'ttsVolume' },
       sfxVolumeSlider: { valueId: 'sfxVolumeValue', key: 'sfxVolume', fixed: 2 },
       noiseVolumeSlider: { valueId: 'noiseVolumeValue', key: 'noiseVolume', fixed: 2 },
     };
@@ -570,36 +571,88 @@ function loadSettings() {
     for (const [sliderId, data] of Object.entries(sliders)) {
       if (settings[data.key] !== undefined) {
         const slider = document.getElementById(sliderId);
-        slider.value = settings[data.key];
-        document.getElementById(data.valueId).textContent = parseFloat(settings[data.key]).toFixed(data.fixed);
+        const value = parseFloat(settings[data.key]);
+        slider.value = value;
+        document.getElementById(data.valueId).textContent = value.toFixed(data.fixed);
+        
+        // グローバル変数も更新
+        if (data.key === 'ttsRate') {
+          ttsRate = value;
+        } else if (data.key === 'ttsVolume') {
+          ttsVolume = value;
+        }
       }
     }
-    ttsVolume = parseFloat(settings.ttsVolume || 1.0);
 
-    // ▼▼▼【ここから修正】特別警戒モードの状態を復元 ▼▼▼
+    // ★★★ オーディオゲインに反映 ★★★
+    if (masterGain && settings.masterVolume !== undefined) {
+      masterGain.gain.setValueAtTime(parseFloat(settings.masterVolume), audioCtx?.currentTime || 0);
+    }
+    if (sfxGain && settings.sfxVolume !== undefined) {
+      sfxGain.gain.setValueAtTime(parseFloat(settings.sfxVolume), audioCtx?.currentTime || 0);
+    }
+    if (noiseGain && settings.noiseVolume !== undefined) {
+      noiseGain.gain.setValueAtTime(parseFloat(settings.noiseVolume), audioCtx?.currentTime || 0);
+    }
+
+    // ★★★ 特別警戒モードの状態を復元 ★★★
     if (typeof settings.isSpecialAlertMode === 'boolean') {
       isSpecialAlertMode = settings.isSpecialAlertMode;
       const specialAlertModeBtn = document.getElementById("specialAlertModeToggle");
       specialAlertModeBtn.textContent = `特別警戒: ${isSpecialAlertMode ? "ON" : "OFF"}`;
       specialAlertModeBtn.classList.toggle("active", isSpecialAlertMode);
     }
-    // ▲▲▲【ここまで修正】▲▲▲
 
-    // 音声の選択状態を復元
-    document.getElementById('voiceSel').value = settings.voiceIndex;
+    // ★★★ 音声の選択状態を復元 ★★★
+    const voiceSelect = document.getElementById('voiceSel');
+    voiceSelect.value = settings.voiceIndex || 0;
     
-    // TTSの有効/無効状態を復元
-    if (typeof settings.ttsEnabled === 'boolean' && TTS_ENABLED !== settings.ttsEnabled) {
-      toggleTTS();
+    // chosenVoice グローバル変数も更新
+    if ('speechSynthesis' in window) {
+      const voices = speechSynthesis.getVoices();
+      const voiceIndex = parseInt(settings.voiceIndex) || 0;
+      chosenVoice = voices[voiceIndex] || voices.find(v => /^ja/i.test(v.lang));
+    }
+    
+    // ★★★ TTSの有効/無効状態を復元 ★★★
+    if (typeof settings.ttsEnabled === 'boolean') {
+      TTS_ENABLED = settings.ttsEnabled;
+      
+      // ボタンの表示を更新
+      const btn1 = document.getElementById("ttsToggle");
+      const btn2 = document.getElementById("ttsToggle2");
+      const text = `音声: ${TTS_ENABLED ? "ON" : "OFF"}`;
+      const className = TTS_ENABLED ? "btn active" : "btn";
+      
+      btn1.textContent = text;
+      btn1.className = className;
+      btn2.textContent = text;
+      btn2.className = className;
+      
+      // スライダーの有効/無効を切り替え
+      const sliderElements = document.querySelectorAll('.rate-slider, #voiceSel');
+      sliderElements.forEach(el => {
+        if (TTS_ENABLED) {
+          el.classList.remove('disabled');
+        } else {
+          el.classList.add('disabled');
+        }
+      });
+      
+      // ★★★ TTS_ENABLEDがONの場合、オーディオとタイムシグナルを開始 ★★★
+      if (TTS_ENABLED) {
+        ensureAudio();
+        startTimeSignal();
+      }
     } else {
-      // toggleTTSが呼ばれない場合もUIの状態を更新
-      const sliders = document.querySelectorAll('.rate-slider, #voiceSel');
-      sliders.forEach(el => el.classList.toggle('disabled', !TTS_ENABLED));
+      // 設定がない場合はデフォルトで無効化
+      const sliderElements = document.querySelectorAll('.rate-slider, #voiceSel');
+      sliderElements.forEach(el => el.classList.add('disabled'));
     }
 
   } catch (e) {
     console.error("設定の読み込みに失敗しました:", e);
-    sessionStorage.removeItem(SETTINGS_KEY); // 破損した設定を削除
+    localStorage.removeItem(SETTINGS_KEY);
   }
 }
 
@@ -1884,27 +1937,35 @@ async function runSystem() {
 // イベントリスナー
 // ==========================================
 function initializeSystem(csvText) {
+  // シナリオローダーを作成して CSV をパース
   scenarioLoader = new ScenarioLoader();
-  scenarioLoader.parseCSV(csvText);
+  scenarioLoader.parseCSV(csvText);  // PARAM/LEVEL/NODE を取り込む
+
+  // ユニット種別テーブルを構築（CSVの PARAM lists を利用）
   const unitTypes = {
     investigation: scenarioLoader.paramLists.units_investigation || [],
-    traffic: scenarioLoader.paramLists.units_traffic || [],
-    patrol: scenarioLoader.paramLists.units_patrol || [],
-    backup: scenarioLoader.paramLists.units_backup || []
+    traffic:       scenarioLoader.paramLists.units_traffic       || [],
+    patrol:        scenarioLoader.paramLists.units_patrol        || [],
+    backup:        scenarioLoader.paramLists.units_backup        || []
   };
+
+  // エンジンを初期化
   scenarioEngine = new ScenarioEngine(scenarioLoader, unitTypes);
+
+  // UI: 再読み込みボタンを有効化し、案内メッセージを表示
   document.getElementById("syncBtn").disabled = false;
-  // シナリオ読み込み完了後の処理
-  console.log("✅ シナリオ読込完了。システムを起動します...");
-  document.getElementById("syncBtn").disabled = false; // ←これを追加
-  runSystem();
+  document.getElementById("caseList").innerHTML =
+    '<div class="no-cases">✅ シナリオ読込完了。システムを起動してください</div>';
 }
 
+// ==========================================
+// DOMContentLoaded - 初期化と自動起動
+// ==========================================
 window.addEventListener('DOMContentLoaded', async () => {
-  // --- 1. 設定を復元（従来通り） ---
+  // --- 1. 設定を復元 ---
   loadSettings();
 
-  // --- 2. UIイベント（従来通り・必要部分はそのまま） ---
+  // --- 2. UIイベント ---
   const commanderInput = document.getElementById("commanderInput");
   commanderInput.addEventListener('input', (e) => {
     const newName = e.target.value.trim();
@@ -2001,19 +2062,32 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // --- 3. シナリオ読み込み → 初期化 → 常時自動起動 ---
+  // --- 3. シナリオ読み込み → 初期化 → 常に自動起動 ---
   try {
-    const response = await fetch('scenario.csv');
+    // キャッシュを完全に回避するためのタイムスタンプ付き
+    const cacheBuster = `v=${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const response = await fetch(`scenario.csv?${cacheBuster}`, { 
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
+    
     if (response.ok) {
       const csvText = await response.text();
-      initializeSystem(csvText);                 // ← 初期化（ここでは runSystem を呼ばない実装に統一）
-      // 読み込みに成功したら必ず起動（restart フラグに依存しない）
-      runSystem();
+      initializeSystem(csvText);
+      
+      // ▼▼▼ 【重要】シナリオ読み込み成功後、必ず自動起動 ▼▼▼
+      console.log('[System] Auto-starting system...');
+      await runSystem();
+      
     } else {
       document.getElementById("caseList").innerHTML =
         '<div class="no-cases">❌ scenario.csvの読込に失敗しました。</div>';
     }
   } catch (fetchError) {
+    console.error('[System] Failed to load scenario:', fetchError);
     document.getElementById("caseList").innerHTML =
       '<div class="no-cases">❌ scenario.csvの読込に失敗しました。</div>';
   }
@@ -2068,6 +2142,8 @@ function toggleTTS() {
         speechSynthesis.cancel();
     }
   }
+  
+  saveSettings(); // ★★★ これが呼ばれているか確認 ★★★
 }
 
 // 両方のボタンに同じ関数を割り当て
