@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>通信指令観測システム</title>
+  <title>通信指令シミュレータ</title>
   <meta name="theme-color" content="#1a1a1a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -390,7 +390,7 @@
       }
       
       .btn {
-        width: 100%;
+        flex-grow: 1;
       }
       /* ▲▲▲【ここまで】▲▲▲ */
     }
@@ -420,7 +420,7 @@
 
   <div class="system-header">
     <div class="header-row">
-      <div class="system-title" id="systemTitle">通信指令観測システム</div>
+      <div class="system-title" id="systemTitle">通信指令シミュレータ</div>
       <div class="system-status" id="status">STANDBY</div>
       
       <button id="toggleControls" class="btn">設定</button>
@@ -543,7 +543,7 @@ function loadSettings() {
   if (!savedSettings) {
     // 保存された設定がない場合、タイトルだけ初期設定
     const commanderInput = document.getElementById("commanderInput");
-    document.getElementById("systemTitle").textContent = `${commanderInput.value.trim()}通信指令観測システム`;
+    document.getElementById("systemTitle").textContent = `${commanderInput.value.trim()}通信指令シミュレータ`;
     // スライダーを無効化
     const sliders = document.querySelectorAll('.rate-slider, #voiceSel');
     sliders.forEach(el => el.classList.add('disabled'));
@@ -557,7 +557,7 @@ function loadSettings() {
     const commanderInput = document.getElementById('commanderInput');
     commanderName = settings.commanderName || "本部";
     commanderInput.value = commanderName;
-    document.getElementById("systemTitle").textContent = `${commanderName}通信指令観測システム`;
+    document.getElementById("systemTitle").textContent = `${commanderName}通信指令シミュレータ`;
 
     // ★★★ 各種スライダーの値を復元（実際のシステム変数も更新） ★★★
     const sliders = {
@@ -1970,7 +1970,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   commanderInput.addEventListener('input', (e) => {
     const newName = e.target.value.trim();
     commanderName = newName || "本部";
-    systemTitle.textContent = `${commanderName}通信指令観測システム`;
+    systemTitle.textContent = `${commanderName}通信指令シミュレータ`;
     saveSettings();
   });
 
