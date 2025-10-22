@@ -872,270 +872,177 @@ generateNewCase(busyUnits) {
 // 4. progressCase関数（完全版）
 // index.html の 862-940行目を以下に置き換え
 // ==========================================
-progressCase(caseId, busyUnits) {
-  const caseObj = this.activeCases.get(caseId);
-  if (!caseObj) return null;
-
-  const availableBackupUnits = (this.unitTypes.backup || []).filter(u => !busyUnits.has(u));
-  const caseState = {
-    id: caseId,
-    isNew: false,
-    awaitingResponse: caseObj.awaitingResponse,
-    elapsed: Math.floor((Date.now() - caseObj.startTime) / 1000),
-    hasAvailableBackupUnits: availableBackupUnits.length > 0
-  };
-
-  const nextNode = this.selectNextNode(caseObj.currentNode, caseState);
-  if (!nextNode) {
-    if (caseObj.awaitingResponse) caseObj.awaitingResponse = false;
-    return null;
-  }
-
-  // --- backup-all発令中の他事案待機ロジック ---
-  const needsBackup = nextNode.condition === 'has_units' || 
-                      nextNode.message.includes('{backup_unit}') || 
-                      (nextNode.params && nextNode.params['backup-all'] === 'true');
-  
-  if (this.isBackupAllActive && this.backupAllCaseId !== caseId && needsBackup) {
-    return null; // 待機
-  }
-
-  // --- backup-all発令ロジック ---
-  const isTriggeringBackupAll = nextNode.params && nextNode.params['backup-all'] === 'true';
-  if (isTriggeringBackupAll && !this.isBackupAllActive) {
-    // ★★★ 全ての利用可能なbackup_unitを追加 ★★★
-    this.isBackupAllActive = true;
-    this.backupAllCaseId = caseId;
-    
-    if (availableBackupUnits.length > 0) {
-      const existingBackups = new Set(caseObj.backupUnits);
-      availableBackupUnits.forEach(unit => {
-        if (!existingBackups.has(unit) && unit !== caseObj.unit) {
-          existingBackups.add(unit);
-        }
-      });
-      caseObj.backupUnits = Array.from(existingBackups);
-    }
-  }
-
-  // --- ここから下は通常の進行ロジック ---
-  caseObj.currentNode = nextNode;
-  caseObj.phase = nextNode.phase;
-
-  if (nextNode.params && nextNode.params.escalate_level) {
-    const newLevel = parseInt(nextNode.params.escalate_level, 10);
-    if (!isNaN(newLevel)) {
-      caseObj.level = newLevel;
-    }
-  }
-
-  if (nextNode.params && nextNode.params.add_units) {
-    const newUnits = new Set(caseObj.backupUnits);
-    nextNode.params.add_units.split(';').forEach(unitName => newUnits.add(unitName));
-    caseObj.backupUnits = Array.from(newUnits);
-  }
-
-  if (nextNode.params && nextNode.params['need-response'] === 'true') {
-    caseObj.awaitingResponse = true;
-  } else {
-    caseObj.awaitingResponse = false;
-  }
-
-  const context = {
-    unit: caseObj.unit,
-    zone: caseObj.zone,
-    type_ja: caseObj.scenario.name,
-    commander: commanderName
-  };
-
-  if (caseObj.backupUnits && caseObj.backupUnits.length > 0) {
-    context.backup_unit = caseObj.backupUnits[0];
-  }
-
-  let message = this.parser.parse(nextNode.message, context);
-
-  return {
-    id: `N${String(this.nodeIdCounter++).padStart(6, '0')}`,
-    caseId,
-    level: caseObj.level,
-    phase: nextNode.phase,
-    zone: caseObj.zone,
-    unit: caseObj.unit,
-    message,
-    scenarioName: caseObj.scenario.name,
-    params: nextNode.params
-  };
-}
 
 progressCase(caseId, busyUnits) {
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('🔵 progressCase: 開始');
-  console.log('  事案ID:', caseId);
-  console.log('  isBackupAllActive:', this.isBackupAllActive);
-  console.log('  backupAllCaseId:', this.backupAllCaseId);
-  
-  const caseObj = this.activeCases.get(caseId);
-  if (!caseObj) {
-    console.log('  ❌ 事案が見つかりません');
-    return null;
-  }
-
-  console.log('  📋 現在のフェーズ:', caseObj.phase);
-  console.log('  📋 現在のユニット:', caseObj.unit);
-  console.log('  📋 現在のバックアップ:', caseObj.backupUnits);
-
-  // 利用可能なbackup_unitを取得
-  const allBackupUnits = this.unitTypes.backup || [];
-  console.log('  📊 全backup_unit:', allBackupUnits);
-  console.log('  📊 busyUnits:', Array.from(busyUnits));
-  
-  const availableBackupUnits = allBackupUnits.filter(u => !busyUnits.has(u));
-  console.log('  ✅ 利用可能なbackup_unit:', availableBackupUnits);
-  console.log('  📈 利用可能数:', availableBackupUnits.length);
-  
-  const caseState = {
-    id: caseId,
-    isNew: false,
-    awaitingResponse: caseObj.awaitingResponse,
-    elapsed: Math.floor((Date.now() - caseObj.startTime) / 1000),
-    hasAvailableBackupUnits: availableBackupUnits.length > 0
-  };
-
-  const nextNode = this.selectNextNode(caseObj.currentNode, caseState);
-  if (!nextNode) {
-    console.log('  ⏭️  次のノードがありません');
-    if (caseObj.awaitingResponse) caseObj.awaitingResponse = false;
-    return null;
-  }
-
-  console.log('  ✅ 次のノード:', nextNode.phase);
-  console.log('  📋 nextNode.condition:', nextNode.condition);
-  console.log('  📋 nextNode.message:', nextNode.message.substring(0, 50) + '...');
-  console.log('  📋 nextNode.params:', nextNode.params);
-
-  // --- backup-all発令中の他事案待機ロジック ---
-  const needsBackup = nextNode.condition === 'has_units' || 
-                      nextNode.message.includes('{backup_unit}') || 
-                      (nextNode.params && nextNode.params['backup-all'] === 'true');
-  
-  console.log('  🔍 needsBackup:', needsBackup);
-  console.log('    - condition === has_units:', nextNode.condition === 'has_units');
-  console.log('    - message includes {backup_unit}:', nextNode.message.includes('{backup_unit}'));
-  console.log('    - params[backup-all]:', nextNode.params && nextNode.params['backup-all']);
-  
-  if (this.isBackupAllActive && this.backupAllCaseId !== caseId && needsBackup) {
-    console.log('  ⏸️  backup-all発令中のため、この事案は待機します');
-    console.log('  ⏸️  backup-all事案:', this.backupAllCaseId);
-    console.log('  ⏸️  この事案:', caseId);
-    return null;
-  }
-
-  // --- backup-all発令ロジック ---
-  const isTriggeringBackupAll = nextNode.params && nextNode.params['backup-all'] === 'true';
-  console.log('  🚨 isTriggeringBackupAll:', isTriggeringBackupAll);
-  
-  if (isTriggeringBackupAll && !this.isBackupAllActive) {
-    console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('  🔴 backup-all発令！');
-    console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔵 progressCase: 開始');
+    console.log('  事案ID:', caseId);
+    console.log('  isBackupAllActive:', this.isBackupAllActive);
+    console.log('  backupAllCaseId:', this.backupAllCaseId);
     
-    this.isBackupAllActive = true;
-    this.backupAllCaseId = caseId;
+    const caseObj = this.activeCases.get(caseId);
+    if (!caseObj) {
+      console.log('  ❌ 事案が見つかりません');
+      return null;
+    }
+
+    console.log('  📋 現在のフェーズ:', caseObj.phase);
+    console.log('  📋 現在のユニット:', caseObj.unit);
+    console.log('  📋 現在のバックアップ:', caseObj.backupUnits);
+
+    // 利用可能なbackup_unitを取得
+    const allBackupUnits = this.unitTypes.backup || [];
+    console.log('  📊 全backup_unit:', allBackupUnits);
+    console.log('  📊 busyUnits:', Array.from(busyUnits));
     
-    console.log('  🔴 isBackupAllActive = true');
-    console.log('  🔴 backupAllCaseId =', caseId);
+    const availableBackupUnits = allBackupUnits.filter(u => !busyUnits.has(u));
+    console.log('  ✅ 利用可能なbackup_unit:', availableBackupUnits);
+    console.log('  📈 利用可能数:', availableBackupUnits.length);
     
-    if (availableBackupUnits.length > 0) {
-      const beforeBackups = [...caseObj.backupUnits];
-      console.log('  📊 発令前のバックアップ:', beforeBackups);
+    const caseState = {
+      id: caseId,
+      isNew: false,
+      awaitingResponse: caseObj.awaitingResponse,
+      elapsed: Math.floor((Date.now() - caseObj.startTime) / 1000),
+      hasAvailableBackupUnits: availableBackupUnits.length > 0
+    };
+
+    const nextNode = this.selectNextNode(caseObj.currentNode, caseState);
+    if (!nextNode) {
+      console.log('  ⏭️  次のノードがありません');
+      if (caseObj.awaitingResponse) caseObj.awaitingResponse = false;
+      return null;
+    }
+
+    console.log('  ✅ 次のノード:', nextNode.phase);
+    console.log('  📋 nextNode.condition:', nextNode.condition);
+    console.log('  📋 nextNode.message:', nextNode.message.substring(0, 50) + '...');
+    console.log('  📋 nextNode.params:', nextNode.params);
+
+    // --- backup-all発令中の他事案待機ロジック ---
+    // backup-all発令事案自体は進める
+    // backupユニットを必要としないノードも進める
+    // backupユニットを必要とする他の事案のみ待機
+    const needsBackup = nextNode.condition === 'has_units' || 
+                        nextNode.message.includes('{backup_unit}');
+    
+    console.log('  🔍 needsBackup:', needsBackup);
+    console.log('    - condition === has_units:', nextNode.condition === 'has_units');
+    console.log('    - message includes {backup_unit}:', nextNode.message.includes('{backup_unit}'));
+    
+    if (this.isBackupAllActive && this.backupAllCaseId !== caseId && needsBackup) {
+      console.log('  ⏸️  backup-all発令中のため、この事案は待機します');
+      console.log('  ⏸️  backup-all事案:', this.backupAllCaseId);
+      console.log('  ⏸️  この事案:', caseId);
+      return null;
+    }
+
+    // --- backup-all発令ロジック ---
+    const isTriggeringBackupAll = nextNode.params && nextNode.params['backup-all'] === 'true';
+    console.log('  🚨 isTriggeringBackupAll:', isTriggeringBackupAll);
+    
+    if (isTriggeringBackupAll && !this.isBackupAllActive) {
+      console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('  🔴 backup-all発令！');
+      console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
       
-      // 既存のバックアップユニットと重複しないように追加
-      const existingBackups = new Set(caseObj.backupUnits);
-      availableBackupUnits.forEach(unit => {
-        if (!existingBackups.has(unit) && unit !== caseObj.unit) {
-          existingBackups.add(unit);
-          console.log('    ➕ 追加:', unit);
-        }
-      });
-      caseObj.backupUnits = Array.from(existingBackups);
+      this.isBackupAllActive = true;
+      this.backupAllCaseId = caseId;
       
-      console.log('  ✅ 発令後のバックアップ:', caseObj.backupUnits);
-      console.log('  📈 追加された台数:', caseObj.backupUnits.length - beforeBackups.length);
-      console.log('  📊 合計ユニット数:', 1 + caseObj.backupUnits.length);
+      console.log('  🔴 isBackupAllActive = true');
+      console.log('  🔴 backupAllCaseId =', caseId);
+      
+      if (availableBackupUnits.length > 0) {
+        const beforeBackups = [...caseObj.backupUnits];
+        console.log('  📊 発令前のバックアップ:', beforeBackups);
+        
+        // 既存のバックアップユニットと重複しないように追加
+        const existingBackups = new Set(caseObj.backupUnits);
+        availableBackupUnits.forEach(unit => {
+          if (!existingBackups.has(unit) && unit !== caseObj.unit) {
+            existingBackups.add(unit);
+            console.log('    ➕ 追加:', unit);
+          }
+        });
+        caseObj.backupUnits = Array.from(existingBackups);
+        
+        console.log('  ✅ 発令後のバックアップ:', caseObj.backupUnits);
+        console.log('  📈 追加された台数:', caseObj.backupUnits.length - beforeBackups.length);
+        console.log('  📊 合計ユニット数:', 1 + caseObj.backupUnits.length);
+      } else {
+        console.log('  ⚠️  利用可能なbackup_unitがありませんでした');
+      }
+    }
+
+    // --- ここから下は通常の進行ロジック ---
+
+    caseObj.currentNode = nextNode;
+    caseObj.phase = nextNode.phase;
+
+    // エスカレーションレベルの処理
+    if (nextNode.params && nextNode.params.escalate_level) {
+      const newLevel = parseInt(nextNode.params.escalate_level, 10);
+      if (!isNaN(newLevel)) {
+        caseObj.level = newLevel;
+        console.log('  ⬆️  レベルエスカレート:', newLevel);
+      }
+    }
+
+    // add_unitsパラメータの処理
+    if (nextNode.params && nextNode.params.add_units) {
+      const beforeAdd = [...caseObj.backupUnits];
+      const newUnits = new Set(caseObj.backupUnits);
+      nextNode.params.add_units.split(';').forEach(unitName => newUnits.add(unitName));
+      caseObj.backupUnits = Array.from(newUnits);
+      console.log('  ➕ add_units処理');
+      console.log('    - 処理前:', beforeAdd);
+      console.log('    - 処理後:', caseObj.backupUnits);
+    }
+
+    // need-responseパラメータの処理
+    if (nextNode.params && nextNode.params['need-response'] === 'true') {
+      caseObj.awaitingResponse = true;
+      console.log('  ⏸️  応答待機状態に設定');
     } else {
-      console.log('  ⚠️  利用可能なbackup_unitがありませんでした');
+      caseObj.awaitingResponse = false;
     }
-  }
 
-  // --- ここから下は通常の進行ロジック ---
+    // メッセージのパース
+    const context = {
+      unit: caseObj.unit,
+      zone: caseObj.zone,
+      type_ja: caseObj.scenario.name,
+      commander: commanderName
+    };
 
-  caseObj.currentNode = nextNode;
-  caseObj.phase = nextNode.phase;
-
-  // エスカレーションレベルの処理
-  if (nextNode.params && nextNode.params.escalate_level) {
-    const newLevel = parseInt(nextNode.params.escalate_level, 10);
-    if (!isNaN(newLevel)) {
-      caseObj.level = newLevel;
-      console.log('  ⬆️  レベルエスカレート:', newLevel);
+    if (caseObj.backupUnits && caseObj.backupUnits.length > 0) {
+      context.backup_unit = caseObj.backupUnits[0];
+      console.log('  📋 backup_unit context:', context.backup_unit);
     }
+
+    let message = this.parser.parse(nextNode.message, context);
+
+    console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('  ✅ 事案進行完了');
+    console.log('  📋 事案ID:', caseId);
+    console.log('  📋 フェーズ:', nextNode.phase);
+    console.log('  📋 プライマリユニット:', caseObj.unit);
+    console.log('  📋 バックアップユニット:', caseObj.backupUnits);
+    console.log('  📋 合計ユニット数:', 1 + caseObj.backupUnits.length);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    return {
+      id: `N${String(this.nodeIdCounter++).padStart(6, '0')}`,
+      caseId,
+      level: caseObj.level,
+      phase: nextNode.phase,
+      zone: caseObj.zone,
+      unit: caseObj.unit,
+      message,
+      scenarioName: caseObj.scenario.name,
+      params: nextNode.params
+    };
   }
-
-  // add_unitsパラメータの処理
-  if (nextNode.params && nextNode.params.add_units) {
-    const beforeAdd = [...caseObj.backupUnits];
-    const newUnits = new Set(caseObj.backupUnits);
-    nextNode.params.add_units.split(';').forEach(unitName => newUnits.add(unitName));
-    caseObj.backupUnits = Array.from(newUnits);
-    console.log('  ➕ add_units処理');
-    console.log('    - 処理前:', beforeAdd);
-    console.log('    - 処理後:', caseObj.backupUnits);
-  }
-
-  // need-responseパラメータの処理
-  if (nextNode.params && nextNode.params['need-response'] === 'true') {
-    caseObj.awaitingResponse = true;
-    console.log('  ⏸️  応答待機状態に設定');
-  } else {
-    caseObj.awaitingResponse = false;
-  }
-
-  // メッセージのパース
-  const context = {
-    unit: caseObj.unit,
-    zone: caseObj.zone,
-    type_ja: caseObj.scenario.name,
-    commander: commanderName
-  };
-
-  if (caseObj.backupUnits && caseObj.backupUnits.length > 0) {
-    context.backup_unit = caseObj.backupUnits[0];
-    console.log('  📋 backup_unit context:', context.backup_unit);
-  }
-
-  let message = this.parser.parse(nextNode.message, context);
-
-  console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('  ✅ 事案進行完了');
-  console.log('  📋 事案ID:', caseId);
-  console.log('  📋 フェーズ:', nextNode.phase);
-  console.log('  📋 プライマリユニット:', caseObj.unit);
-  console.log('  📋 バックアップユニット:', caseObj.backupUnits);
-  console.log('  📋 合計ユニット数:', 1 + caseObj.backupUnits.length);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-  return {
-    id: `N${String(this.nodeIdCounter++).padStart(6, '0')}`,
-    caseId,
-    level: caseObj.level,
-    phase: nextNode.phase,
-    zone: caseObj.zone,
-    unit: caseObj.unit,
-    message,
-    scenarioName: caseObj.scenario.name,
-    params: nextNode.params
-  };
-}
   
   getAllActiveCases() {
     return Array.from(this.activeCases.values()).filter(c => c.phase !== 'clear');
@@ -1145,8 +1052,6 @@ progressCase(caseId, busyUnits) {
       return this.getAllActiveCases().filter(c => c.isVisible);
   }
 }
-
-
 
 // ==========================================
 // UI更新
@@ -1608,18 +1513,38 @@ function loadVoices() {
   speechSynthesis.onvoiceschanged = load;
 }
 loadVoices();
-
 async function speakMessage(text, isTest = false) {
-  return new Promise((resolve) => {
+  // ▼▼▼【修正】Promiseの引数に reject を追加 ▼▼▼
+  return new Promise((resolve, reject) => {
     // 50ms待機
     setTimeout(() => {
+      if (!('speechSynthesis' in window)) {
+        // 音声合成が利用できない場合は即時完了させる
+        resolve();
+        return;
+      }
+
       const masterVol = masterGain ? masterGain.gain.value : parseFloat(document.getElementById("masterVolumeSlider").value);
       const utter = new SpeechSynthesisUtterance(text);
       
-      // 設定を確実に適用
       utter.voice = chosenVoice;
-      utter.rate = ttsRate;  // 速度
-      utter.volume = ttsVolume * masterVol;  // 音量
+      utter.rate = ttsRate;
+      utter.volume = ttsVolume * masterVol;
+      
+      // ▼▼▼【重要】読み上げ完了時にPromiseを解決する ▼▼▼
+      utter.onend = resolve;
+      // ▼▼▼【重要】エラー発生時にもPromiseを完了させる ▼▼▼
+      // ▼▼▼【修正】エラーの種類を判別する ▼▼▼
+      utter.onerror = (e) => {
+        // 'interrupted' はユーザーによるキャンセルなので、エラー扱いにせず正常終了とする
+        if (e.error === 'interrupted') {
+          resolve();
+        } else {
+          // それ以外のエラーはコンソールに表示してエラー終了とする
+          console.error("SpeechSynthesisUtterance.onerror", e);
+          reject(e);
+        }
+      };
       
       // さらに50ms待機してからspeak()
       setTimeout(() => {
@@ -1943,11 +1868,18 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 document.getElementById("syncBtn").addEventListener("click", () => {
+  // ▼▼▼【追加】現在再生中の音声をすべて停止する ▼▼▼
+  if ('speechSynthesis' in window) {
+    speechSynthesis.cancel();
+  }
+  // ▲▲▲【追加】ここまで ▲▲▲
+
   if (TTS_ENABLED) {
     startTimeSignal();
   }
   runSystem();
 });
+
 function toggleTTS() {
   TTS_ENABLED = !TTS_ENABLED;
   
