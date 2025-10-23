@@ -1,8 +1,7 @@
-const CACHE_NAME = 'command-system-v1';
+const CACHE_NAME = 'command-system-v2'; // ★★★ バージョンを上げる ★★★
 const urlsToCache = [
   './',
-  './index.html',
-  // './scenario.csv',  ← ★★★ これを削除（キャッシュしない）★★★
+  // './index.html',  // ★★★ index.htmlもキャッシュしない ★★★
   './DSEG7ClassicMini-Bold.woff',
   './icon-192.png',
   './icon-512.png'
@@ -14,14 +13,16 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(urlsToCache))
   );
+  // ★★★ 即座に有効化 ★★★
+  self.skipWaiting();
 });
 
 // リクエスト時の処理
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   
-  // ★★★ scenario.csv は常にネットワークから取得 ★★★
-  if (url.pathname.endsWith('scenario.csv')) {
+  // ★★★ scenario.csv と index.html は常にネットワークから取得 ★★★
+  if (url.pathname.endsWith('scenario.csv') || url.pathname.endsWith('index.html') || url.pathname === '/' || url.pathname.endsWith('/')) {
     event.respondWith(
       fetch(event.request, {
         cache: 'no-store',
@@ -54,4 +55,6 @@ self.addEventListener('activate', event => {
       );
     })
   );
+  // ★★★ すぐに制御を開始 ★★★
+  return self.clients.claim();
 });
