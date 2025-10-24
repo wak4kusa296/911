@@ -85,8 +85,9 @@
       font-family: 'DSEG7', monospace;
       letter-spacing: 0.5px;
       width: 100%;
-      font-size: 10cqw;
+      font-size: 5cqw;
       text-align: center;
+      padding: 36px;
     }
 
     .system-status {
@@ -424,7 +425,6 @@
       <div class="system-status" id="status">STANDBY</div>
       
       <button id="toggleControls" class="btn">設定</button>
-      <button id="specialAlertModeToggle" class="btn">特別警戒: OFF</button>
       <button id="ttsToggle" class="btn">音声: OFF</button>
       <button id="syncBtn" class="btn primary">再読み込み</button>
 
@@ -435,6 +435,8 @@
 
   <div class="control-panel" id="controlPanel">
     <div class="control-row">
+      <label class="setting-lavel">ドラマチックモード（重大事案のみ発生させるモード）</label>
+      <button id="specialAlertModeToggle" class="btn">ドラマチックモード: OFF</button>
       <label class="setting-lavel">本部の名称</label>
       <input type="text" id="commanderInput" class="commander-input" value="本部">
       <label class="setting-lavel">音声設定（音声ONの時のみ編集可能）</label>
@@ -463,6 +465,11 @@
         <span class="value" id="sfxVolumeValue">1.00</span>
       </div>
       <div class="rate-slider">
+        <label>時報音量:</label>
+        <input type="range" id="timeSigVolumeSlider" min="0" max="1" step="0.05" value="0.5">
+        <span class="value" id="timeSigVolumeValue">0.50</span>
+      </div>
+      <div class="rate-slider">
         <label>無線ノイズ音量:</label>
         <input type="range" id="noiseVolumeSlider" min="0" max="1" step="0.05" value="0.5">
         <span class="value" id="noiseVolumeValue">0.50</span>
@@ -489,7 +496,7 @@
 <script>
 // グローバル変数
 let ttsVolume = 1.0; // TTS音量だけは別で保持
-let isSpecialAlertMode = false; // ▼▼▼【追加】特別警戒モードの状態管理フラグ
+let isSpecialAlertMode = false; // ▼▼▼【追加】ドラマチックモードモードの状態管理フラグ
 
 const BASE_CPS = 12;
 let commanderName = "本部";
@@ -498,11 +505,10 @@ let TTS_ENABLED = false;
 let chosenVoice = null;
 let ttsRate = 1.5;
 let audioCtx = null;
-// ▼▼▼【変更点】音量ミキサー（GainNode）をグローバルに定義 ▼▼▼
 let masterGain = null;
+let timeSigGain = null; // ★ NEW: 時報専用
 let sfxGain = null;
 let noiseGain = null;
-// ▲▲▲【変更点】▲▲▲
 let scenarioLoader = null;
 let scenarioEngine = null;
 let runningToken = 0;
@@ -516,35 +522,37 @@ let scrollTimeout = null;
 
 const SETTINGS_KEY = 'simulatorSettings';
 
-/**
- * 現在の各種設定をsessionStorageにJSON形式で保存します。
- */
 function saveSettings() {
   const settings = {
     commanderName: document.getElementById('commanderInput').value.trim() || "本部",
-    ttsRate: parseFloat(document.getElementById('rateSlider').value),
-    masterVolume: parseFloat(document.getElementById('masterVolumeSlider').value),
-    ttsVolume: parseFloat(document.getElementById('ttsVolumeSlider').value),
-    sfxVolume: parseFloat(document.getElementById('sfxVolumeSlider').value),
-    noiseVolume: parseFloat(document.getElementById('noiseVolumeSlider').value),
-    voiceIndex: parseInt(document.getElementById('voiceSel').value) || 0,
-    ttsEnabled: TTS_ENABLED, // ★★★ これが保存されているか確認 ★★★
+    ttsRate:       parseFloat(document.getElementById('rateSlider').value),
+
+    masterVolume:  parseFloat(document.getElementById('masterVolumeSlider').value),
+    ttsVolume:     parseFloat(document.getElementById('ttsVolumeSlider').value),
+    sfxVolume:     parseFloat(document.getElementById('sfxVolumeSlider').value),
+
+    // ★ 追加: 時報音量
+    timeSigVolume: parseFloat(document.getElementById('timeSigVolumeSlider').value),
+
+    noiseVolume:   parseFloat(document.getElementById('noiseVolumeSlider').value),
+
+    voiceIndex:    parseInt(document.getElementById('voiceSel').value) || 0,
+    ttsEnabled:    TTS_ENABLED,
     isSpecialAlertMode: isSpecialAlertMode
   };
-  
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); // ★★★ sessionStorage → localStorage ★★★
+
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
-/**
- * sessionStorageから設定を読み込み、UIに復元します。
- */
 
 function loadSettings() {
   const savedSettings = localStorage.getItem(SETTINGS_KEY);
   if (!savedSettings) {
-    // 保存された設定がない場合、タイトルだけ初期設定
+    // 初回デフォルト
     const commanderInput = document.getElementById("commanderInput");
-    document.getElementById("systemTitle").textContent = `${commanderInput.value.trim()}通信指令シミュレータ`;
-    // スライダーを無効化
+    document.getElementById("systemTitle").textContent =
+      `${commanderInput.value.trim()}通信指令シミュレータ`;
+
+    // 音声OFF扱いなのでスライダー無効化
     const sliders = document.querySelectorAll('.rate-slider, #voiceSel');
     sliders.forEach(el => el.classList.add('disabled'));
     return;
@@ -553,83 +561,105 @@ function loadSettings() {
   try {
     const settings = JSON.parse(savedSettings);
 
-    // ★★★ 本部の名称を復元（グローバル変数も更新） ★★★
+    // 本部名
     const commanderInput = document.getElementById('commanderInput');
     commanderName = settings.commanderName || "本部";
     commanderInput.value = commanderName;
-    document.getElementById("systemTitle").textContent = `${commanderName}通信指令シミュレータ`;
+    document.getElementById("systemTitle").textContent =
+      `${commanderName}通信指令シミュレータ`;
 
-    // ★★★ 各種スライダーの値を復元（実際のシステム変数も更新） ★★★
+    // スライダー値をUIに戻す
     const sliders = {
-      rateSlider: { valueId: 'rateValue', key: 'ttsRate', fixed: 1, globalVar: 'ttsRate' },
-      masterVolumeSlider: { valueId: 'masterVolumeValue', key: 'masterVolume', fixed: 2 },
-      ttsVolumeSlider: { valueId: 'ttsVolumeValue', key: 'ttsVolume', fixed: 2, globalVar: 'ttsVolume' },
-      sfxVolumeSlider: { valueId: 'sfxVolumeValue', key: 'sfxVolume', fixed: 2 },
-      noiseVolumeSlider: { valueId: 'noiseVolumeValue', key: 'noiseVolume', fixed: 2 },
+      rateSlider:           { valueId: 'rateValue',           key: 'ttsRate',        fixed: 1, globalVar: 'ttsRate' },
+      masterVolumeSlider:   { valueId: 'masterVolumeValue',   key: 'masterVolume',   fixed: 2 },
+      ttsVolumeSlider:      { valueId: 'ttsVolumeValue',      key: 'ttsVolume',      fixed: 2, globalVar: 'ttsVolume' },
+      sfxVolumeSlider:      { valueId: 'sfxVolumeValue',      key: 'sfxVolume',      fixed: 2 },
+
+      // ★ 追加: 時報音量スライダー
+      timeSigVolumeSlider:  { valueId: 'timeSigVolumeValue',  key: 'timeSigVolume',  fixed: 2 },
+
+      noiseVolumeSlider:    { valueId: 'noiseVolumeValue',    key: 'noiseVolume',    fixed: 2 },
     };
 
     for (const [sliderId, data] of Object.entries(sliders)) {
       if (settings[data.key] !== undefined) {
-        const slider = document.getElementById(sliderId);
+        const sliderEl = document.getElementById(sliderId);
         const value = parseFloat(settings[data.key]);
-        slider.value = value;
-        document.getElementById(data.valueId).textContent = value.toFixed(data.fixed);
-        
-        // グローバル変数も更新
-        if (data.key === 'ttsRate') {
+
+        sliderEl.value = value;
+        document.getElementById(data.valueId).textContent =
+          value.toFixed(data.fixed);
+
+        // グローバルへの反映（必要なものだけ）
+        if (data.globalVar === 'ttsRate') {
           ttsRate = value;
-        } else if (data.key === 'ttsVolume') {
+        } else if (data.globalVar === 'ttsVolume') {
           ttsVolume = value;
         }
       }
     }
 
-    // ★★★ オーディオゲインに反映 ★★★
+    // GainNode側へ反映（AudioContextが既にある場合）
     if (masterGain && settings.masterVolume !== undefined) {
-      masterGain.gain.setValueAtTime(parseFloat(settings.masterVolume), audioCtx?.currentTime || 0);
+      masterGain.gain.setValueAtTime(
+        parseFloat(settings.masterVolume),
+        audioCtx?.currentTime || 0
+      );
+    }
+    if (timeSigGain && settings.timeSigVolume !== undefined) {
+      timeSigGain.gain.setValueAtTime(
+        parseFloat(settings.timeSigVolume),
+        audioCtx?.currentTime || 0
+      );
     }
     if (sfxGain && settings.sfxVolume !== undefined) {
-      sfxGain.gain.setValueAtTime(parseFloat(settings.sfxVolume), audioCtx?.currentTime || 0);
+      sfxGain.gain.setValueAtTime(
+        parseFloat(settings.sfxVolume),
+        audioCtx?.currentTime || 0
+      );
     }
     if (noiseGain && settings.noiseVolume !== undefined) {
-      noiseGain.gain.setValueAtTime(parseFloat(settings.noiseVolume), audioCtx?.currentTime || 0);
+      noiseGain.gain.setValueAtTime(
+        parseFloat(settings.noiseVolume),
+        audioCtx?.currentTime || 0
+      );
     }
 
-    // ★★★ 特別警戒モードの状態を復元 ★★★
+    // 特別警戒モード状態
     if (typeof settings.isSpecialAlertMode === 'boolean') {
       isSpecialAlertMode = settings.isSpecialAlertMode;
       const specialAlertModeBtn = document.getElementById("specialAlertModeToggle");
-      specialAlertModeBtn.textContent = `特別警戒: ${isSpecialAlertMode ? "ON" : "OFF"}`;
+      specialAlertModeBtn.textContent =
+        `特別警戒: ${isSpecialAlertMode ? "ON" : "OFF"}`;
       specialAlertModeBtn.classList.toggle("active", isSpecialAlertMode);
     }
 
-    // ★★★ 音声の選択状態を復元 ★★★
+    // 音声選択
     const voiceSelect = document.getElementById('voiceSel');
     voiceSelect.value = settings.voiceIndex || 0;
-    
-    // chosenVoice グローバル変数も更新
     if ('speechSynthesis' in window) {
       const voices = speechSynthesis.getVoices();
       const voiceIndex = parseInt(settings.voiceIndex) || 0;
-      chosenVoice = voices[voiceIndex] || voices.find(v => /^ja/i.test(v.lang));
+      chosenVoice =
+        voices[voiceIndex] ||
+        voices.find(v => /^ja/i.test(v.lang));
     }
-    
-    // ★★★ TTSの有効/無効状態を復元 ★★★
+
+    // TTS有効/無効を復元
     if (typeof settings.ttsEnabled === 'boolean') {
       TTS_ENABLED = settings.ttsEnabled;
-      
-      // ボタンの表示を更新
+
       const btn1 = document.getElementById("ttsToggle");
       const btn2 = document.getElementById("ttsToggle2");
       const text = `音声: ${TTS_ENABLED ? "ON" : "OFF"}`;
       const className = TTS_ENABLED ? "btn active" : "btn";
-      
+
       btn1.textContent = text;
       btn1.className = className;
       btn2.textContent = text;
       btn2.className = className;
-      
-      // スライダーの有効/無効を切り替え
+
+      // スライダー有効/無効
       const sliderElements = document.querySelectorAll('.rate-slider, #voiceSel');
       sliderElements.forEach(el => {
         if (TTS_ENABLED) {
@@ -638,14 +668,14 @@ function loadSettings() {
           el.classList.add('disabled');
         }
       });
-      
-      // ★★★ TTS_ENABLEDがONの場合、オーディオとタイムシグナルを開始 ★★★
+
+      // ONならオーディオ系立ち上げ＋時報開始
       if (TTS_ENABLED) {
         ensureAudio();
         startTimeSignal();
       }
     } else {
-      // 設定がない場合はデフォルトで無効化
+      // 設定が無いときはOFF扱い
       const sliderElements = document.querySelectorAll('.rate-slider, #voiceSel');
       sliderElements.forEach(el => el.classList.add('disabled'));
     }
@@ -656,35 +686,43 @@ function loadSettings() {
   }
 }
 
-/**
- * 音声(TTS)のON/OFFを切り替え、UIを更新し、設定を保存します。
- */
+
 function toggleTTS() {
+  const wasEnabled = TTS_ENABLED; // 直前の状態を覚えておく
   TTS_ENABLED = !TTS_ENABLED;
   
   const btn1 = document.getElementById("ttsToggle");
   const btn2 = document.getElementById("ttsToggle2");
   const text = `音声: ${TTS_ENABLED ? "ON" : "OFF"}`;
   const className = TTS_ENABLED ? "btn active" : "btn";
-  
+
   btn1.textContent = text;
   btn1.className = className;
   btn2.textContent = text;
   btn2.className = className;
-  
+
   const sliders = document.querySelectorAll('.rate-slider, #voiceSel');
   sliders.forEach(el => el.classList.toggle('disabled', !TTS_ENABLED));
-  
+
   if (TTS_ENABLED) {
+    // ONにしたとき
     ensureAudio();
     startTimeSignal();
   } else {
+    // OFFにしたとき
     stopTimeSignal();
     if ('speechSynthesis' in window) {
       speechSynthesis.cancel();
     }
+
+    // ⭐ここを追加：ホワイトノイズを止める
+    if (wasEnabled) {
+      // asyncだけど待たなくてOK。止めに行くだけ
+      stopWhiteNoise();
+    }
   }
-  saveSettings(); // 状態の変更を保存
+
+  saveSettings();
 }
 
 
@@ -705,6 +743,7 @@ class ScenarioLoader {
     this.scenarioMap = new Map();
   }
 
+  // ▼▼▼【ここから修正】「NAME」行を「確率」行に変更 ▼▼▼
   parseCSV(csvText) {
     const lines = csvText.split('\n').filter(line => {
       const trimmed = line.trim();
@@ -715,63 +754,102 @@ class ScenarioLoader {
     let currentScenario = null;
     const nodeStack = [];
 
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const [section, id, condition, probability, phase, message, params] = 
-        this.parseCSVLine(line);
+      const cols = this.parseCSVLine(line); 
+      const sectionOrProb = cols[0].trim();
+      const depth = this.getIndentDepth(line); // ★ インデントを先に取得
 
-      if (section === 'PARAM') {
+      if (sectionOrProb === 'PARAM') {
+        // PARAM, id, , , , , params
+        const [, id, , , , , params] = cols;
         this.paramLists[id] = params ? params.split(';').map(s => s.trim()) : [];
       } 
-      else if (section === 'LEVEL') {
+      else if (sectionOrProb === 'LEVEL') {
+        // LEVEL, id, ...
+        const [, id] = cols;
         currentLevel = { level: id, scenarios: [] };
         this.scenarios.push(currentLevel);
-        nodeStack.length = 0;
+        nodeStack.length = 0; 
       }
-      else if (section === 'NAME') {
+      else if (depth === 0 && !isNaN(parseFloat(sectionOrProb))) {
+        // 事案定義行 (インデント0 かつ 1列目が数値)
+        // 例: 0.5,ハイジャック事案,,,,,type=hijack;level=4
+        
+        const probability = parseFloat(sectionOrProb);
+        const id = cols[1]; // ハイジャック事案
+        const params = cols[6]; // 7列目
         const paramsObj = this.parseParams(params);
+
+        // LEVEL行がCSVにない場合、paramsのlevel=Nから推測（フォールバック）
+        if (!currentLevel) {
+            const levelStr = `Lv${parseInt(paramsObj.level) || 1}`;
+            currentLevel = this.scenarios.find(l => l.level === levelStr);
+            if (!currentLevel) {
+                currentLevel = { level: levelStr, scenarios: [] };
+                this.scenarios.push(currentLevel);
+            }
+        }
+
         currentScenario = {
           name: id,
           type: paramsObj.type || 'unknown',
           level: parseInt(paramsObj.level) || 1,
-          probability: 0,
+          probability: probability, // ★ 1列目の確率を事案の発生確率として設定
           rootNodes: []
         };
         currentLevel.scenarios.push(currentScenario);
         this.scenarioMap.set(paramsObj.type, currentScenario);
-        nodeStack.length = 0;
+        nodeStack.length = 0; // スタックリセット
       }
-      else if (section === 'NODE') {
-        const depth = this.getIndentDepth(line);
+      else if (currentScenario && depth > 0 && !isNaN(parseFloat(sectionOrProb))) {
+        // NODE行 (インデントあり かつ 1列目が数値)
+        // 例:   1.0,派遣要請,{msg},"{params}"
+        
+        const probability = parseFloat(sectionOrProb);
+        const phase = cols[1];
+        const message = cols[2];
+        const paramsStr = cols[3]; // 4カラム目
+        const paramsObj = this.parseParams(paramsStr);
+        
         const node = {
-          id: id.trim(),
+          id: phase.trim(),
           depth,
-          condition,
-          probability: parseFloat(probability) || 1.0,
-          phase,
-          message,
-          params: this.parseParams(params),
+          condition: null, // ★ あとで推測
+          probability: probability,
+          phase: phase,
+          message: message,
+          params: paramsObj,
           children: []
         };
 
-        if (condition === 'new_case') {
-          currentScenario.probability = node.probability;
-        }
-
+        // 親ノードを探す (自分より浅いインデントが見つかるまでスタックを遡る)
         while (nodeStack.length > 0 && nodeStack[nodeStack.length - 1].depth >= depth) {
           nodeStack.pop();
         }
 
         if (nodeStack.length === 0) {
+          // 親がいない ＝ rootNode
+          // (depth === 1 であることを期待するが、depth > 0 であればrootNodeとして扱う)
+          node.condition = 'default'; // ★ 'new_case' は使われないので 'default' に
           currentScenario.rootNodes.push(node);
         } else {
-          nodeStack[nodeStack.length - 1].children.push(node);
+          // 子ノード
+          const parentNode = nodeStack[nodeStack.length - 1];
+          parentNode.children.push(node);
+          
+          // Conditionの推測
+          if (parentNode.params && parentNode.params['need-response'] === 'true') {
+              node.condition = 'awaiting_response';
+          } else {
+              node.condition = 'default'; 
+          }
         }
-
-        nodeStack.push(node);
+        nodeStack.push(node); // 自分をスタックに追加
       }
     }
   }
+  // ▲▲▲【ここまで修正】▲▲▲
   
   parseCSVLine(line) {
     const regex = /(?:^|,)(\"(?:[^\"]+|\"\")*\"|[^,]*)/g;
@@ -799,7 +877,20 @@ class ScenarioLoader {
   getIndentDepth(line) {
     const match = line.match(/^(\s*)/);
     if (!match) return 0;
-    return Math.floor(match[1].length / 2);
+
+    // 1. タブ文字(\t)を、意図する「半角スペース2つ」に置換
+    let indentString = match[1].replace(/\t/g, '  ');
+    
+    // 2. その他の特殊な空白文字(\u00A0など)を半角スペースに正規化
+    indentString = indentString.replace(/\u00A0/g, ' '); 
+    
+    // ▼▼▼【最終修正】全角スペースを半角スペース2つに置換 ▼▼▼
+    indentString = indentString.replace(/　/g, '  ');
+    // ▲▲▲【最終修正】▲▲▲
+
+    // 正規化された文字列の長さで、インデントレベルを計算
+    // (スペース2つでインデント1とする)
+    return Math.floor(indentString.length / 2);
   }
 
   parseParams(paramsStr) {
@@ -808,13 +899,19 @@ class ScenarioLoader {
     const result = {};
     for (const pair of pairs) {
       const [key, value] = pair.split('=').map(s => s.trim());
+      // ▼▼▼【修正】キー重複時に上書きせず、';'で連結する ▼▼▼
       if (key && value) {
-        result[key] = value;
+        if (result[key]) {
+          result[key] = `${result[key]};${value}`;
+        } else {
+          result[key] = value;
+        }
       }
+      // ▲▲▲【修正】▲▲▲
     }
     return result;
   }
-
+  
   async loadFromFile(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -933,23 +1030,25 @@ class ScenarioEngine {
   }
 
 
+// ▼▼▼【ここから修正】rootNodeが複数ある場合の確率分岐に対応 ▼▼▼
 generateNewCase(busyUnits) {
-  // backup-all発令中は新規事件を生成しない
-  if (this.isBackupAllActive) {
-      return null;
-  }
 
-  // ▼▼▼【ここから変更】特別警戒モードのロジック ▼▼▼
+  const randomDelay = Math.random() * 4000 + 500;
+  // ▼▼▼【ここから変更】ドラマチックモードモードのロジック ▼▼▼
   let candidateScenarios;
   if (isSpecialAlertMode) {
-    // 特別警戒モードがONの場合、Lv3以上のシナリオのみを候補にする
-    candidateScenarios = this.loader.scenarios
-      .filter(level => parseInt(level.level.replace('Lv', '')) >= 3)
-      .flatMap(level => level.scenarios);
-  } else {
-    // 通常モードの場合はすべてのシナリオを候補にする
-    candidateScenarios = this.loader.scenarios.flatMap(level => level.scenarios);
-  }
+  // 全シナリオを一旦フラットにしてから、
+  // そのシナリオ個別の .level が 3以上のものだけ残す
+  candidateScenarios = this.loader.scenarios
+    .flatMap(levelGroup => levelGroup.scenarios)
+    .filter(scenario => scenario.level >= 3);
+} else {
+  // 通常時は全部
+  candidateScenarios = this.loader.scenarios
+    .flatMap(levelGroup => levelGroup.scenarios);
+}
+// 通常モードの場合はすべてのシナリオを候補にする
+
   
   const totalWeight = candidateScenarios.reduce((sum, s) => sum + s.probability, 0);
   if (totalWeight <= 0) return null;
@@ -969,8 +1068,40 @@ generateNewCase(busyUnits) {
   
   if (!selectedScenario) return null;
 
-  const firstNode = selectedScenario.rootNodes[0];
+  // ▼▼▼【ここから変更】rootNodesから確率で選択 ▼▼▼
+  if (!selectedScenario.rootNodes || selectedScenario.rootNodes.length === 0) {
+      console.error(`シナリオ "${selectedScenario.name}" にルートノードがありません。`);
+      return null;
+  }
+
+  let firstNode = null;
+  if (selectedScenario.rootNodes.length === 1) {
+      firstNode = selectedScenario.rootNodes[0];
+  } else {
+      // 複数のrootNodeがある場合、確率で分岐
+      const totalRootWeight = selectedScenario.rootNodes.reduce((sum, node) => sum + node.probability, 0);
+      const rNode = Math.random() * totalRootWeight;
+      let cumulativeNode = 0;
+      for (const node of selectedScenario.rootNodes) {
+          cumulativeNode += node.probability;
+          if (rNode <= cumulativeNode) {
+              firstNode = node;
+              break;
+          }
+      }
+      if (!firstNode) firstNode = selectedScenario.rootNodes[0]; // フォールバック
+  }
+  // ▲▲▲【変更ここまで】▲▲▲
+
   const isTriggeringBackupAll = firstNode.params && firstNode.params['backup-all'] === 'true';
+
+  // ▼▼▼【ここから修正】backup-allが既に発令中の場合、新しいbackup-all事案を生成しない ▼▼▼
+  if (this.isBackupAllActive && isTriggeringBackupAll) {
+      console.log(`[System] generateNewCase: 既存のbackup-all事案 (${this.backupAllCaseId}) が実行中のため、新規backup-all事案 (${selectedScenario.name}) の生成を待機します。`);
+      return null; // ★★★ 新規のbackup-all事案をブロック
+  }
+  // ▲▲▲【修正ここまで】▲▲▲
+
   const availableBackupUnits = (this.unitTypes.backup || []).filter(u => !busyUnits.has(u));
   
   let unit;
@@ -979,7 +1110,15 @@ generateNewCase(busyUnits) {
   // --- backup-allと通常事案の分岐処理 ---
   if (isTriggeringBackupAll) {
       // --- backup-allのロジック ---
+      // (この時点で this.isBackupAllActive は false であることが保証されている)
+      console.log('--- DEBUG: generateNewCase (backup-all) ---');
+      console.log('this.unitTypes.backup:', this.unitTypes.backup);
+      console.log('availableBackupUnits.length:', availableBackupUnits.length);
+      console.log('---------------------------------');
+
       if (availableBackupUnits.length === 0) {
+          // ★ ユニット不足で発令できない場合も待機
+          console.log(`[System] generateNewCase: backup-all事案 (${selectedScenario.name}) を生成しようとしましたが、利用可能なユニットが0のため待機します。`);
           return null;
       }
       
@@ -989,21 +1128,29 @@ generateNewCase(busyUnits) {
 
       // グローバルなbackup-all状態を設定
       this.isBackupAllActive = true;
-      this.backupAllCaseId = `C${String(this.caseIdCounter).padStart(4, '0')}`;
+      this.backupAllCaseId = `C${String(this.caseIdCounter).padStart(4, '0')}`; // ★ IDは後で設定するcaseIdと合わせる
 
   } else {
       // --- 通常事案のロジック ---
+      
+      // ▼▼▼【追加】backup-all発令中は、backupユニットを必要とする新規事案をブロック ▼▼▼
       const scenarioType = selectedScenario.type;
+      if (this.isBackupAllActive && scenarioType === 'backup') {
+          console.log(`[System] generateNewCase: backup-all発令中のため、新規backup事案 (${selectedScenario.name}) の生成を待機します。`);
+          return null;
+      }
+      // ▲▲▲【追加ここまで】▲▲▲
+      
       let unitTypeKey;
       
-      if (['suspicious_object', 'demonstration'].includes(scenarioType)) {
-          unitTypeKey = 'backup';
-      } else if (['traffic_violation', 'parking_violation', 'traffic_accident', 'hit_and_run'].includes(scenarioType)) {
+      if (['investigation'].includes(scenarioType)) {
+          unitTypeKey = 'investigation';
+      } else if (['traffic'].includes(scenarioType)) {
           unitTypeKey = 'traffic';
-      } else if (['patrol', 'suspicious'].includes(scenarioType)) {
+      } else if (['patrol'].includes(scenarioType)) {
           unitTypeKey = 'patrol';
       } else {
-          unitTypeKey = 'investigation';
+          unitTypeKey = 'backup';
       }
       
       const unitPool = this.unitTypes[unitTypeKey] || [];
@@ -1028,7 +1175,7 @@ generateNewCase(busyUnits) {
   // --- 全ての事案に共通のロジック ---
   const caseId = `C${String(this.caseIdCounter++).padStart(4, '0')}`;
   if (isTriggeringBackupAll) {
-      this.backupAllCaseId = caseId;
+      this.backupAllCaseId = caseId; // ★ここでcaseIdを正式に割り当て
   }
   const zoneList = this.loader.paramLists.zones || [];
   const zone = zoneList[Math.floor(Math.random() * zoneList.length)];
@@ -1042,7 +1189,14 @@ generateNewCase(busyUnits) {
 
   if (firstNode.params && firstNode.params.add_units) {
       const newUnits = new Set(caseObj.backupUnits);
-      firstNode.params.add_units.split(';').forEach(unitName => newUnits.add(unitName));
+      // ▼▼▼【修正】';' と '・' の両方で分割してユニットを追加 ▼▼▼
+      firstNode.params.add_units.split(';').forEach(unitGroup => {
+        unitGroup.split('・').forEach(unitName => {
+          const trimmedName = unitName.trim();
+          if (trimmedName) newUnits.add(trimmedName);
+        });
+      });
+      // ▲▲▲【修正】▲▲▲
       caseObj.backupUnits = Array.from(newUnits);
   }
   
@@ -1068,211 +1222,358 @@ generateNewCase(busyUnits) {
   };
 }
 
-// ==========================================
-// 4. progressCase関数（完全版）
-// index.html の 862-940行目を以下に置き換え
-// ==========================================
-
 progressCase(caseId, busyUnits) {
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔵 progressCase: 開始');
-    console.log('  事案ID:', caseId);
-    console.log('  isBackupAllActive:', this.isBackupAllActive);
-    console.log('  backupAllCaseId:', this.backupAllCaseId);
-    
-    const caseObj = this.activeCases.get(caseId);
-    if (!caseObj) {
-      console.log('  ❌ 事案が見つかりません');
-      return null;
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🔵 progressCase: 開始');
+  console.log('  事案ID:', caseId);
+  console.log('  isBackupAllActive:', this.isBackupAllActive);
+  console.log('  backupAllCaseId:', this.backupAllCaseId);
+
+  // 安全用プロパティ初期化
+  if (this.lastBackupAllActivity === undefined) {
+    this.lastBackupAllActivity = Date.now();
+  }
+  if (this.backupAllStallWarned === undefined) {
+    this.backupAllStallWarned = false;
+  }
+
+  // 対象事案
+  const caseObj = this.activeCases.get(caseId);
+  if (!caseObj) {
+    console.log('  ❌ 事案が見つかりません');
+    return null;
+  }
+
+  console.log('  📋 現在のフェーズ:', caseObj.phase);
+  console.log('  📋 現在のユニット:', caseObj.unit);
+  console.log('  📋 現在のバックアップ:', [...caseObj.backupUnits]);
+
+  // いま空いてる応援部隊
+  const allBackupUnits = this.unitTypes.backup || [];
+  console.log('  📊 全backup_unit:', allBackupUnits);
+  console.log('  📊 busyUnits:', Array.from(busyUnits));
+
+  const availableBackupUnits = allBackupUnits.filter(u => !busyUnits.has(u));
+  console.log('  ✅ 利用可能なbackup_unit:', availableBackupUnits);
+  console.log('  📈 利用可能数:', availableBackupUnits.length);
+
+  // selectNextNode用の状態
+  const caseState = {
+    id: caseId,
+    isNew: false,
+    awaitingResponse: caseObj.awaitingResponse,
+    elapsed: Math.floor((Date.now() - caseObj.startTime) / 1000),
+    hasAvailableBackupUnits: availableBackupUnits.length > 0
+  };
+
+  // 次に進むべきノード
+  const nextNode = this.selectNextNode(caseObj.currentNode, caseState);
+  if (!nextNode) {
+    console.log(`  ⏭️ 次のノードがありません (${caseId}) 終了`);
+
+    // この事案が backup-all の本体だった場合は自然終了で解除
+    if (this.isBackupAllActive && this.backupAllCaseId === caseId) {
+      console.log(`[System] backup-all事案 (${caseId}) が終了。モードを解除します。`);
+      this.isBackupAllActive = false;
+      this.backupAllCaseId = null;
     }
 
-    console.log('  📋 現在のフェーズ:', caseObj.phase);
-    console.log('  📋 現在のユニット:', caseObj.unit);
-    console.log('  📋 現在のバックアップ:', caseObj.backupUnits);
+    this.activeCases.delete(caseId);
 
-    // 利用可能なbackup_unitを取得
-    const allBackupUnits = this.unitTypes.backup || [];
-    console.log('  📊 全backup_unit:', allBackupUnits);
-    console.log('  📊 busyUnits:', Array.from(busyUnits));
-    
-    const availableBackupUnits = allBackupUnits.filter(u => !busyUnits.has(u));
-    console.log('  ✅ 利用可能なbackup_unit:', availableBackupUnits);
-    console.log('  📈 利用可能数:', availableBackupUnits.length);
-    
-    const caseState = {
-      id: caseId,
-      isNew: false,
-      awaitingResponse: caseObj.awaitingResponse,
-      elapsed: Math.floor((Date.now() - caseObj.startTime) / 1000),
-      hasAvailableBackupUnits: availableBackupUnits.length > 0
-    };
-
-    const nextNode = this.selectNextNode(caseObj.currentNode, caseState);
-    if (!nextNode) {
-      console.log('  ⏭️  次のノードがありません');
-      if (caseObj.awaitingResponse) caseObj.awaitingResponse = false;
-      return null;
-    }
-
-    console.log('  ✅ 次のノード:', nextNode.phase);
-    console.log('  📋 nextNode.condition:', nextNode.condition);
-    console.log('  📋 nextNode.message:', nextNode.message.substring(0, 50) + '...');
-    console.log('  📋 nextNode.params:', nextNode.params);
-
-    // ▼▼▼【追加】has_units条件でbackup_unitが必要だが利用不可の場合は待機 ▼▼▼
-    if (nextNode.condition === 'has_units' && availableBackupUnits.length === 0) {
-      console.log('  ⏸️  has_units条件: backup_unitが利用可能になるまで待機します');
-      return null;
-    }
-    // ▲▲▲【追加ここまで】▲▲▲
-
-    // --- backup-all発令中の他事案待機ロジック ---
-    // backup-all発令事案自体は進める
-    // backupユニットを必要としないノードも進める
-    // backupユニットを必要とする他の事案のみ待機
-    const needsBackup = nextNode.condition === 'has_units' || 
-                        nextNode.message.includes('{backup_unit}');
-    
-    console.log('  🔍 needsBackup:', needsBackup);
-    console.log('    - condition === has_units:', nextNode.condition === 'has_units');
-    console.log('    - message includes {backup_unit}:', nextNode.message.includes('{backup_unit}'));
-    
-    if (this.isBackupAllActive && this.backupAllCaseId !== caseId && needsBackup) {
-      console.log('  ⏸️  backup-all発令中のため、この事案は待機します');
-      console.log('  ⏸️  backup-all事案:', this.backupAllCaseId);
-      console.log('  ⏸️  この事案:', caseId);
-      return null;
-    }
-
-    // --- backup-all発令ロジック ---
-    const isTriggeringBackupAll = nextNode.params && nextNode.params['backup-all'] === 'true';
-    console.log('  🚨 isTriggeringBackupAll:', isTriggeringBackupAll);
-    
-    if (isTriggeringBackupAll && !this.isBackupAllActive) {
-      console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('  🔴 backup-all発令！');
-      console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
-      
-      this.isBackupAllActive = true;
-      this.backupAllCaseId = caseId;
-      
-      console.log('  🔴 isBackupAllActive = true');
-      console.log('  🔴 backupAllCaseId =', caseId);
-      
-      if (availableBackupUnits.length > 0) {
-        const beforeBackups = [...caseObj.backupUnits];
-        console.log('  📊 発令前のバックアップ:', beforeBackups);
-        
-        // 既存のバックアップユニットと重複しないように追加
-        const existingBackups = new Set(caseObj.backupUnits);
-        availableBackupUnits.forEach(unit => {
-          if (!existingBackups.has(unit) && unit !== caseObj.unit) {
-            existingBackups.add(unit);
-            console.log('    ➕ 追加:', unit);
-          }
-        });
-        caseObj.backupUnits = Array.from(existingBackups);
-        
-        console.log('  ✅ 発令後のバックアップ:', caseObj.backupUnits);
-        console.log('  📈 追加された台数:', caseObj.backupUnits.length - beforeBackups.length);
-        console.log('  📊 合計ユニット数:', 1 + caseObj.backupUnits.length);
-      } else {
-        console.log('  ⚠️  利用可能なbackup_unitがありませんでした');
-      }
-    }
-
-    // --- ここから下は通常の進行ロジック ---
-
-    caseObj.currentNode = nextNode;
-    caseObj.phase = nextNode.phase;
-
-    // エスカレーションレベルの処理
-    if (nextNode.params && nextNode.params.escalate_level) {
-      const newLevel = parseInt(nextNode.params.escalate_level, 10);
-      if (!isNaN(newLevel)) {
-        caseObj.level = newLevel;
-        console.log('  ⬆️  レベルエスカレート:', newLevel);
-      }
-    }
-
-    // add_unitsパラメータの処理
-    if (nextNode.params && nextNode.params.add_units) {
-      const beforeAdd = [...caseObj.backupUnits];
-      const newUnits = new Set(caseObj.backupUnits);
-      nextNode.params.add_units.split(';').forEach(unitName => newUnits.add(unitName));
-      caseObj.backupUnits = Array.from(newUnits);
-      console.log('  ➕ add_units処理');
-      console.log('    - 処理前:', beforeAdd);
-      console.log('    - 処理後:', caseObj.backupUnits);
-    }
-
-    // need-responseパラメータの処理
-    if (nextNode.params && nextNode.params['need-response'] === 'true') {
-      caseObj.awaitingResponse = true;
-      console.log('  ⏸️  応答待機状態に設定');
-    } else {
+    if (caseObj.awaitingResponse) {
       caseObj.awaitingResponse = false;
     }
-
-    // メッセージのパース
-    const context = {
-      unit: caseObj.unit,
-      zone: caseObj.zone,
-      type_ja: caseObj.scenario.name,
-      commander: commanderName
-    };
-
-    // ▼▼▼【変更】backup_unitの割り当てロジックを改善 ▼▼▼
-    // has_units条件かつbackup_unitが必要な場合、利用可能なbackup_unitからランダムに1台選択
-    if (nextNode.condition === 'has_units' && nextNode.message.includes('{backup_unit}')) {
-      if (availableBackupUnits.length > 0) {
-        // ランダムに1台選択
-        const selectedBackupUnit = availableBackupUnits[Math.floor(Math.random() * availableBackupUnits.length)];
-        
-        // まだ割り当てられていない場合のみ追加
-        if (!caseObj.backupUnits.includes(selectedBackupUnit)) {
-          caseObj.backupUnits.push(selectedBackupUnit);
-          console.log('  ➕ 新しいbackup_unitを割り当て:', selectedBackupUnit);
-        }
-        
-        context.backup_unit = selectedBackupUnit;
-        console.log('  📋 backup_unit context:', context.backup_unit);
-      }
-    } else if (caseObj.backupUnits && caseObj.backupUnits.length > 0) {
-      // has_units以外で既にbackup_unitが割り当てられている場合
-      context.backup_unit = caseObj.backupUnits[0];
-      console.log('  📋 backup_unit context (既存):', context.backup_unit);
-    }
-    // ▲▲▲【変更ここまで】▲▲▲
-
-    let message = this.parser.parse(nextNode.message, context);
-
-    console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('  ✅ 事案進行完了');
-    console.log('  📋 事案ID:', caseId);
-    console.log('  📋 フェーズ:', nextNode.phase);
-    console.log('  📋 プライマリユニット:', caseObj.unit);
-    console.log('  📋 バックアップユニット:', caseObj.backupUnits);
-    console.log('  📋 合計ユニット数:', 1 + caseObj.backupUnits.length);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-    return {
-      id: `N${String(this.nodeIdCounter++).padStart(6, '0')}`,
-      caseId,
-      level: caseObj.level,
-      phase: nextNode.phase,
-      zone: caseObj.zone,
-      unit: caseObj.unit,
-      message,
-      scenarioName: caseObj.scenario.name,
-      params: nextNode.params
-    };
+    return null;
   }
+
+  console.log('  ✅ 次のノード:', nextNode.phase);
+  console.log('  📋 nextNode.condition:', nextNode.condition);
+  console.log('  📋 nextNode.message:', (nextNode.message || '').substring(0, 80) + '...');
+  console.log('  📋 nextNode.params:', nextNode.params);
+
+  // デバッグ用に peek（1手先）だけはログに出しておく（ブロック判定では使わない）
+  let peekNode = null;
+  try {
+    peekNode = this.selectNextNode(nextNode, caseState) || null;
+  } catch (e) {
+    console.warn('  ⚠️ peekNode取得時に例外:', e);
+    peekNode = null;
+  }
+  if (peekNode) {
+    console.log('  🔍 peekNode.phase:', peekNode.phase);
+    console.log('  🔍 peekNode.message:', (peekNode.message || '').substring(0, 80) + '...');
+    console.log('  🔍 peekNode.params:', peekNode.params);
+  } else {
+    console.log('  🔍 peekNode: (なし)');
+  }
+
+  // ======================================================
+  // 待機判定ロジック
+  // ======================================================
+
+  // この案件にはすでに応援部隊が張り付いている？
+  const caseAlreadyHasBackup = (caseObj.backupUnits && caseObj.backupUnits.length > 0);
+
+  // グローバルで「今すぐ動ける応援」がいる？
+  const backupAvailableNow = (availableBackupUnits.length > 0);
+
+  // ①「現場からの初回応援リクエスト」判定
+  //
+  // まだこの案件に応援がいない状態で、
+  // nextNode が「応援ください／至急支援願いたい」系（= 応援要請フェーズ）か？
+  //
+  // これは dispatcher（本部）ではなく現場側が「応援を要請する」と言っている段階。
+  // この段階でも、もう応援が全出払なら無線を流さず足踏みしたい。
+  //
+  const nodeIsFirstFieldRequest = (node) => {
+    if (!node) return false;
+    if (caseAlreadyHasBackup) return false; // もう応援が付いてるなら初回要請ではない
+
+    // 判定の軸はフェーズ名 or メッセージ文面
+    const phaseSuggestsRequest =
+      node.phase && node.phase.includes('応援要請');
+
+    const text = node.message || '';
+    const messageSuggestsRequest =
+      text.includes('応援を要請') ||
+      text.includes('応援要請') ||
+      text.includes('至急支援願いたい') ||
+      text.includes('支援願いたい') ||
+      text.includes('支援要請');
+
+    return phaseSuggestsRequest || messageSuggestsRequest;
+  };
+
+  // ②「本部が最初の派遣指示を出す」判定
+  //
+  // まだこの案件に応援がいない状態で、
+  // nextNode が実際に {backup_unit} を呼ぶ or backup-all=true を撃とうとしているなら、
+  // それは初回派遣（本部アナウンス）なので止めたい。
+  //
+  const nodeIsFirstDispatchFromHQ = (node) => {
+    if (!node) return false;
+    if (caseAlreadyHasBackup) return false; // 既に応援が到着済みなら「2回目以降の呼びかけ」なので止めない
+
+    const mentionsBackupUnitInMessage =
+      node.message && node.message.includes('{backup_unit}');
+    const isBackupAllCall =
+      node.params && node.params['backup-all'] === 'true';
+
+    return (mentionsBackupUnitInMessage || isBackupAllCall);
+  };
+
+  const blockFieldRequest   = nodeIsFirstFieldRequest(nextNode);
+  const blockHQDispatch     = nodeIsFirstDispatchFromHQ(nextNode);
+
+  // どっちかに該当し、かつ今は空いてる応援がいないなら待機
+  //
+  // - blockFieldRequest: 「応援を要請する。至急支援願いたい。」←ここで止めたい
+  // - blockHQDispatch:   「{backup_unit}、至急現場へ転進せよ。」や「全応援を」←ここでも止めたい
+  //
+  const shouldStandbyBecauseNoBackup =
+    (blockFieldRequest || blockHQDispatch) && !backupAvailableNow;
+
+  if (shouldStandbyBecauseNoBackup) {
+    console.log('  ⏸ 応援関連フェーズだが空きなし。待機します。');
+    console.log('     (blockFieldRequest=', blockFieldRequest,
+                ', blockHQDispatch=', blockHQDispatch, ')');
+    return null;
+  }
+
+  // ------------------------------------------------------
+  // backup-all（全応援招集）中の他案件の足止め
+  // ------------------------------------------------------
+  //
+  // 別の案件が backup-all を走らせている場合、
+  // 他の案件が「新しく応援を取りたい / backup-allを新規に宣言したい」
+  // という局面に入ろうとしたら待機させる。
+  //
+  // ただし、既に応援が張り付いてる案件での後続交信
+  // （=2回目以降の {backup_unit} 呼びかけ）は止めない。
+  //
+  const thisNodeIsTryingToGetFreshBackupNow =
+    (!caseAlreadyHasBackup) &&
+    nextNode.message &&
+    nextNode.message.includes('{backup_unit}');
+
+  const thisNodeIsTryingToDeclareBackupAllNow =
+    nextNode.params && nextNode.params['backup-all'] === 'true';
+
+  const isRequestingNewBackupOrBackupAll =
+    thisNodeIsTryingToGetFreshBackupNow || thisNodeIsTryingToDeclareBackupAllNow;
+
+  if (this.isBackupAllActive &&
+      this.backupAllCaseId !== caseId &&
+      isRequestingNewBackupOrBackupAll) {
+
+    console.log('  ⏸ backup-all発令中。他案件は待機します。');
+    console.log('     優先現場:', this.backupAllCaseId, ' / この事案:', caseId);
+    console.log('     (isRequestingNewBackupOrBackupAll=', isRequestingNewBackupOrBackupAll, ')');
+
+    // backup-all本体が長時間動いてないのにロックし続けてるようなら警告だけ出す
+    const now = Date.now();
+    const stalledMs = now - (this.lastBackupAllActivity || 0);
+
+    if (stalledMs > 90_000 && !this.backupAllStallWarned) {
+      console.warn(
+        `[Safety] backup-all(${this.backupAllCaseId}) が ${Math.floor(stalledMs / 1000)}秒進行なしのままロック継続中。` +
+        `状況確認が必要な可能性があります。`
+      );
+      this.backupAllStallWarned = true;
+    }
+
+    return null;
+  }
+
+  // ======================================================
+  // ここから先は、進行確定処理
+  // ======================================================
+
+  // backup-all の実処理（全隊招集をこの事案が宣言する場合）
+  const isBackupAllCallNow =
+    nextNode.params && nextNode.params['backup-all'] === 'true';
+
+  console.log('  🚨 isBackupAllCallNow:', isBackupAllCallNow);
+  if (isBackupAllCallNow) {
+    console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('  🔴 backup-all発令！');
+    console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
+
+    this.isBackupAllActive = true;
+    this.backupAllCaseId = caseId;
+
+    console.log('  🔴 isBackupAllActive = true');
+    console.log('  🔴 backupAllCaseId =', caseId);
+
+    const beforeBackups = [...caseObj.backupUnits];
+    console.log('  📊 発令前のバックアップ:', beforeBackups);
+
+    // まだ入っていない応援ユニットも全部吸い上げる
+    const existingBackups = new Set(caseObj.backupUnits);
+    availableBackupUnits.forEach(unitName => {
+      if (!existingBackups.has(unitName) && unitName !== caseObj.unit) {
+        existingBackups.add(unitName);
+        console.log('    ➕ 追加:', unitName);
+      }
+    });
+    caseObj.backupUnits = Array.from(existingBackups);
+
+    console.log('  ✅ 発令後のバックアップ:', caseObj.backupUnits);
+    console.log('  📈 追加された台数:', caseObj.backupUnits.length - beforeBackups.length);
+    console.log('  📊 合計ユニット数:', 1 + caseObj.backupUnits.length);
+  }
+
+  // ノード遷移を反映
+  caseObj.currentNode = nextNode;
+  caseObj.phase = nextNode.phase;
+
+  // レベルエスカレーション
+  if (nextNode.params && nextNode.params.escalate_level) {
+    const newLevel = parseInt(nextNode.params.escalate_level, 10);
+    if (!isNaN(newLevel)) {
+      caseObj.level = newLevel;
+      console.log('  ⬆️ レベルエスカレート:', newLevel);
+    }
+  }
+
+  // add_units パラメータでバックアップ隊を追加
+  if (nextNode.params && nextNode.params.add_units) {
+    const beforeAdd = [...caseObj.backupUnits];
+    const newUnits = new Set(caseObj.backupUnits);
+
+    nextNode.params.add_units.split(';').forEach(unitGroup => {
+      unitGroup.split('・').forEach(unitName => {
+        const trimmedName = unitName.trim();
+        if (trimmedName) newUnits.add(trimmedName);
+      });
+    });
+
+    caseObj.backupUnits = Array.from(newUnits);
+    console.log('  ➕ add_units処理');
+    console.log('    - 処理前:', beforeAdd);
+    console.log('    - 処理後:', caseObj.backupUnits);
+  }
+
+  // need-response=true のときは応答待機にする
+  if (nextNode.params && nextNode.params['need-response'] === 'true') {
+    caseObj.awaitingResponse = true;
+    console.log('  ⏸ 応答待機状態に設定');
+  } else {
+    caseObj.awaitingResponse = false;
+  }
+
+  // 無線メッセージで使う context
+  const context = {
+    unit: caseObj.unit,
+    zone: caseObj.zone,
+    type_ja: caseObj.scenario.name,
+    commander: commanderName
+  };
+
+  // {backup_unit} の埋め込み
+  if (nextNode.message.includes('{backup_unit}')) {
+    let unitToUse = null;
+
+    if (caseObj.backupUnits && caseObj.backupUnits.length > 0) {
+      // 既にこの案件に張り付いてる応援を呼ぶ
+      unitToUse = caseObj.backupUnits[0];
+      console.log('  📋 backup_unit context (既存):', unitToUse);
+
+    } else if (availableBackupUnits.length > 0) {
+      // まだ付いてないなら今空いてる応援から新規に割り当て
+      const selectedBackupUnit =
+        availableBackupUnits[Math.floor(Math.random() * availableBackupUnits.length)];
+      caseObj.backupUnits.push(selectedBackupUnit);
+      unitToUse = selectedBackupUnit;
+      console.log('  ➕ 新しいbackup_unitを割り当て:', selectedBackupUnit);
+
+    } else {
+      console.warn(`  ⚠️ backup_unitが必要でしたが、割り当てられませんでした。 (Case: ${caseId}, Node: ${nextNode.phase})`);
+    }
+
+    context.backup_unit = unitToUse;
+
+  } else if (caseObj.backupUnits && caseObj.backupUnits.length > 0) {
+    // このノード自体は {backup_unit} を含まないが、
+    // 既に応援はいるので、その隊名を context に入れておく
+    context.backup_unit = caseObj.backupUnits[0];
+  }
+
+  // テンプレ展開
+  let message = this.parser.parse(nextNode.message, context);
+
+  // backup-all本体が動いたら、その活動時刻を更新＆警告フラグ解除
+  if (this.isBackupAllActive && this.backupAllCaseId === caseId) {
+    this.lastBackupAllActivity = Date.now();
+    this.backupAllStallWarned = false;
+  }
+
+  console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('  ✅ 事案進行完了');
+  console.log('  📋 事案ID:', caseId);
+  console.log('  📋 フェーズ:', nextNode.phase);
+  console.log('  📋 プライマリユニット:', caseObj.unit);
+  console.log('  📋 バックアップユニット:', caseObj.backupUnits);
+  console.log('  📋 合計ユニット数:', 1 + caseObj.backupUnits.length);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  return {
+    id: `N${String(this.nodeIdCounter++).padStart(6, '0')}`,
+    caseId,
+    level: caseObj.level,
+    phase: nextNode.phase,
+    zone: caseObj.zone,
+    unit: caseObj.unit,
+    message,
+    scenarioName: caseObj.scenario.name,
+    params: nextNode.params
+  };
+}
 
   getAllActiveCases() {
     return Array.from(this.activeCases.values()).filter(c => c.phase !== 'clear');
   }
-  
+
   getVisibleCases() {
       return this.getAllActiveCases().filter(c => c.isVisible);
   }
@@ -1416,33 +1717,37 @@ async function typeOut(seed, cpsBase, ev, msgEl) {
 // 音声関連
 // ==========================================
 
-// ▼▼▼【変更点】AudioContextとミキサーの初期化処理をここに集約 ▼▼▼
 function ensureAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    
-    masterGain = audioCtx.createGain();
-    sfxGain = audioCtx.createGain();
-    noiseGain = audioCtx.createGain();
-    
-    sfxGain.connect(masterGain);
-    noiseGain.connect(masterGain);
+
+    masterGain   = audioCtx.createGain();
+    timeSigGain  = audioCtx.createGain(); // ★ 時報用
+    sfxGain      = audioCtx.createGain();
+    noiseGain    = audioCtx.createGain();
+
+    // ルーティング
+    timeSigGain.connect(masterGain); // 時報はここへ
+    sfxGain.connect(masterGain);     // 効果音
+    noiseGain.connect(masterGain);   // 無線ノイズ
     masterGain.connect(audioCtx.destination);
 
-    // スライダーの初期値を反映
-    const masterVol = parseFloat(document.getElementById("masterVolumeSlider").value);
-    const sfxVol = parseFloat(document.getElementById("sfxVolumeSlider").value);
-    const noiseVol = parseFloat(document.getElementById("noiseVolumeSlider").value);
-    
-    masterGain.gain.setValueAtTime(masterVol, audioCtx.currentTime);
-    sfxGain.gain.setValueAtTime(sfxVol, audioCtx.currentTime);
-    noiseGain.gain.setValueAtTime(noiseVol, audioCtx.currentTime);
+    // スライダー現在値を反映
+    const masterVol   = parseFloat(document.getElementById("masterVolumeSlider").value);
+    const timeSigVol  = parseFloat(document.getElementById("timeSigVolumeSlider").value || "0.5");
+    const sfxVol      = parseFloat(document.getElementById("sfxVolumeSlider").value);
+    const noiseVol    = parseFloat(document.getElementById("noiseVolumeSlider").value);
+
+    masterGain.gain.setValueAtTime(masterVol,  audioCtx.currentTime);
+    timeSigGain.gain.setValueAtTime(timeSigVol, audioCtx.currentTime);
+    sfxGain.gain.setValueAtTime(sfxVol,        audioCtx.currentTime);
+    noiseGain.gain.setValueAtTime(noiseVol,    audioCtx.currentTime);
   }
+
   if (audioCtx.state === "suspended") {
     audioCtx.resume();
   }
 }
-// ▲▲▲【変更点】▲▲▲
 
 function playChirp(type) {
   if (!audioCtx) return;
@@ -1548,26 +1853,39 @@ function stopWhiteNoise() {
 
 function toneNTT(kind) {
   if (!TTS_ENABLED || !audioCtx) return;
+
   const p = {
-    pip: { f: 2000, dur: 4, g: 0.03, atk: 0.001, dec: 0.030, rel: 0.030, h2: 0.3 },
-    pop: { f: 500, dur: 100, g: 0.06, atk: 0.001, dec: 0.050, rel: 0.060, h2: 1 },
-    peen: { f: 1000, dur: 600, g: 0.06, atk: 0.003, dec: 0.01, rel: 0.003, h2: 1 }
+    pip:  { f: 2000, dur: 4,   g: 0.03, atk: 0.001, dec: 0.030, rel: 0.030, h2: 0.3 },
+    pop:  { f: 500,  dur: 100, g: 0.06, atk: 0.001, dec: 0.050, rel: 0.060, h2: 1   },
+    peen: { f: 1000, dur: 600, g: 0.06, atk: 0.003, dec: 0.01,  rel: 0.003, h2: 1   }
   }[kind];
 
-  const ctx = audioCtx, t0 = ctx.currentTime;
-  const osc = ctx.createOscillator(); osc.type = 'square'; osc.frequency.value = p.f;
-  const gain = ctx.createGain(); gain.gain.value = 0;
-  const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = p.f * 1.4;
-  osc.connect(filter); filter.connect(gain);
-  // ▼▼▼【変更点】接続先をsfxGainミキサーに変更 ▼▼▼
-  gain.connect(sfxGain);
-  // ▲▲▲【変更点】▲▲▲
+  const ctx = audioCtx;
+  const t0 = ctx.currentTime;
 
+  const osc = ctx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.value = p.f;
+
+  const gain = ctx.createGain();
+  gain.gain.value = 0;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = p.f * 1.4;
+
+  osc.connect(filter);
+  filter.connect(gain);
+
+  // ★ ここが変更ポイント：時報専用のバスへ
+  gain.connect(timeSigGain);
+
+  // エンベロープ
   const g = gain.gain;
   g.setValueAtTime(0, t0);
-  g.linearRampToValueAtTime(p.g, t0 + p.atk);
-  g.linearRampToValueAtTime(p.g * 0.8, t0 + p.atk + p.dec);
-  g.linearRampToValueAtTime(0.0001, t0 + (p.dur / 1000) + p.rel);
+  g.linearRampToValueAtTime(p.g,           t0 + p.atk);
+  g.linearRampToValueAtTime(p.g * 0.8,     t0 + p.atk + p.dec);
+  g.linearRampToValueAtTime(0.0001,        t0 + (p.dur / 1000) + p.rel);
 
   osc.start(t0);
   osc.stop(t0 + (p.dur / 1000) + p.rel + 0.05);
@@ -1731,6 +2049,9 @@ function stopTimeSignal() {
     scrollTimeout = setTimeout(resetAutoScroll, 5000);
   });
  
+  let touchStartY = 0;
+  let hasMoved = false;
+
   // touchstartでは userScrolling = true にしない！
   log.addEventListener('touchstart', (e) => {
     touchStartY = e.touches[0].clientY;
@@ -1740,19 +2061,32 @@ function stopTimeSignal() {
 
   // touchmoveで実際にスクロールした時だけ設定
   log.addEventListener('touchmove', (e) => {
-    if (実際にスクロールした) {
+    const deltaY = e.touches[0].clientY - touchStartY;
+    if (Math.abs(deltaY) > 5) { // 5px以上の移動でスクロールとみなす
       userScrolling = true;  // ← ここで初めて設定
+      hasMoved = true;
     }
   });
 
   // touchendでスクロールしていない場合は何もしない
   log.addEventListener('touchend', () => {
     if (hasMoved) {  // ← スクロールした場合のみ
+      clearTimeout(scrollTimeout); // 既存のタイマーをクリア
       scrollTimeout = setTimeout(resetAutoScroll, 5000);
     }
     // スクロールしてなければ自動スクロール継続
   });
  
+  log.addEventListener('mousedown', () => { // マウスドラッグ開始
+      userScrolling = true;
+      clearTimeout(scrollTimeout);
+      if (scrollAnimationFrame) {
+          cancelAnimationFrame(scrollAnimationFrame);
+          scrollAnimationFrame = null;
+      }
+      isAutoScrolling = false;
+  });
+
   log.addEventListener('mouseup', () => {
     clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(resetAutoScroll, 5000);
@@ -1824,6 +2158,7 @@ async function speakMessage(text, isTest = false) {
 /// ==========================================
 // メインループ
 // ==========================================
+
 async function runSystem() {
   if (!scenarioEngine) {
     alert('CSVファイルを先に読み込んでください');
@@ -1848,6 +2183,9 @@ async function runSystem() {
   async function processAndDisplayEvent(event) {
   if (!event) return;
   
+  const randomDelay = Math.random() * 2000 + 2000;
+  await sleep(randomDelay);
+
   const caseObj = scenarioEngine.activeCases.get(event.caseId);
   const isNewCase = caseObj && !caseObj.isVisible;
 
@@ -1906,7 +2244,9 @@ async function runSystem() {
   }
   if (TTS_ENABLED) {
     await stopWhiteNoise();
-    playChirp('end');
+    if (TTS_ENABLED) {
+      playChirp('end');
+    }
   }
 
   // ★★★ 追加：メッセージ表示完了後に新規事案をCasePanelに表示 ★★★
@@ -1925,32 +2265,25 @@ async function runSystem() {
       updateCaseStatus();
   }
 
-  // --- backup-all状態の解除ロジック ---
-  if (event.params && event.params.clear === 'true') {
-    // 完了した事案が「backup-all」を発令した事案かどうかを確認
-    if (scenarioEngine.isBackupAllActive && event.caseId === scenarioEngine.backupAllCaseId) {
-      // 「発出済みのbackup_unit事件を解決してから」のロジック
-      // 状態を解除し、他の事案が応援を呼べるようにする
-      scenarioEngine.isBackupAllActive = false;
-      scenarioEngine.backupAllCaseId = null;
-    }
-    scenarioEngine.activeCases.delete(event.caseId);
-    updateCaseStatus(); 
-  }
+  // ▼▼▼【変更】clear=true関連のロジックをすべて削除 ▼▼▼
+  // (終了処理は progressCase 内に移動したため)
+  // ▲▲▲【変更ここまで】▲▲▲
   
-  const randomDelay = Math.random() * 4000 + 2000;
-  await sleep(randomDelay);
 }
 
   updateCaseStatus();
 
   while (my === runningToken) {
     let eventToProcess = null;
+    
+    // ▼▼▼【修正】busyUnits の計算ロジックを修正 ▼▼▼
     const busyUnits = new Set();
     for (const caseObj of scenarioEngine.activeCases.values()) {
         busyUnits.add(caseObj.unit);
-        busyUnits.add(...caseObj.backupUnits);
+        // forEach を使って全ユニットを Set に追加
+        caseObj.backupUnits.forEach(unit => busyUnits.add(unit));
     }
+    // ▲▲▲【修正ここまで】▲▲▲
     
     if (pendingResponseCaseId) {
       eventToProcess = scenarioEngine.progressCase(pendingResponseCaseId, busyUnits);
@@ -1963,7 +2296,7 @@ async function runSystem() {
       const activeCases = scenarioEngine.getVisibleCases();
       const activeCaseCount = activeCases.length;
 
-      if (activeCaseCount < 5 && Math.random() < 0.5) {
+      if (activeCaseCount < 5 && Math.random() < 0.5 ) {
         eventToProcess = scenarioEngine.generateNewCase(busyUnits);
       }
 
@@ -1974,7 +2307,7 @@ async function runSystem() {
         const oldestCase = activeCases[0];
         const otherCases = activeCases.slice(1);
 
-        if (Math.random() < 0.5) {
+        if (Math.random() < 0.1) {
           caseIdToProgress = oldestCase.id;
         } else {
           if (otherCases.length > 0) {
@@ -2006,7 +2339,14 @@ async function runSystem() {
 function initializeSystem(csvText) {
   // シナリオローダーを作成して CSV をパース
   scenarioLoader = new ScenarioLoader();
-  scenarioLoader.parseCSV(csvText);  // PARAM/LEVEL/NODE を取り込む
+  try { // ★★★ パース失敗をキャッチ ★★★
+    scenarioLoader.parseCSV(csvText);  // PARAM/LEVEL/NODE を取り込む
+  } catch (e) {
+    console.error("CSVのパースに失敗:", e);
+    document.getElementById("caseList").innerHTML =
+      '<div class="no-cases">❌ CSVの解析に失敗しました。書式を確認してください。</div>';
+    return; // ★★★ここで中断
+  }
 
   // ユニット種別テーブルを構築（CSVの PARAM lists を利用）
   const unitTypes = {
@@ -2015,6 +2355,10 @@ function initializeSystem(csvText) {
     patrol:        scenarioLoader.paramLists.units_patrol        || [],
     backup:        scenarioLoader.paramLists.units_backup        || []
   };
+
+  console.log('--- DEBUG: initializeSystem ---');
+  console.log('読み込まれた unitTypes.backup:', unitTypes.backup);
+  console.log('---------------------------------');
 
   // エンジンを初期化
   scenarioEngine = new ScenarioEngine(scenarioLoader, unitTypes);
@@ -2045,7 +2389,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (specialAlertModeBtn) {
     specialAlertModeBtn.addEventListener("click", () => {
       isSpecialAlertMode = !isSpecialAlertMode;
-      specialAlertModeBtn.textContent = `特別警戒: ${isSpecialAlertMode ? "ON" : "OFF"}`;
+      specialAlertModeBtn.textContent = `ドラマチックモード: ${isSpecialAlertMode ? "ON" : "OFF"}`;
       specialAlertModeBtn.classList.toggle("active", isSpecialAlertMode);
       saveSettings();
       if (TTS_ENABLED) {
@@ -2106,6 +2450,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     playEmergencyBeep(1000, false);
   });
 
+  const timeSigSlider = document.getElementById("timeSigVolumeSlider");
+  timeSigSlider.addEventListener('input', (e) => {
+    const vol = parseFloat(e.target.value);
+    document.getElementById("timeSigVolumeValue").textContent = vol.toFixed(2);
+    if (timeSigGain) {
+      timeSigGain.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.01);
+    }
+    saveSettings();
+  });
+  timeSigSlider.addEventListener('change', () => {
+    // TTSがONのときだけ、"ピッ" を1回鳴らして確認できるようにする
+    ensureAudio();
+    toneNTT('pip');
+  });
+
   document.getElementById("noiseVolumeSlider").addEventListener('input', (e) => {
     const vol = parseFloat(e.target.value);
     document.getElementById("noiseVolumeValue").textContent = vol.toFixed(2);
@@ -2129,6 +2488,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // ▼▼▼【ここに追加】ブラウザリロード時のTTSキャンセル ▼▼▼
+  window.addEventListener('beforeunload', () => {
+    // ブラウザのリロードやページ離脱時にTTSを強制キャンセル
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+  });
+  // ▲▲▲【追加ここまで】▲▲▲
+
   // --- 3. シナリオ読み込み → 初期化 → 常に自動起動 ---
   try {
     // キャッシュを完全に回避するためのタイムスタンプ付き
@@ -2146,9 +2514,11 @@ window.addEventListener('DOMContentLoaded', async () => {
       initializeSystem(csvText);
       
       // ▼▼▼ 【重要】シナリオ読み込み成功後、必ず自動起動 ▼▼▼
-      console.log('[System] Auto-starting system...');
-      updateTimers(); // ← ここに移動（runSystemの前）
-      await runSystem();
+      if (scenarioEngine) { // ★★★ initializeSystemが成功した場合のみ起動 ★★★
+        console.log('[System] Auto-starting system...');
+        updateTimers(); // ← ここに移動（runSystemの前）
+        await runSystem();
+      }
     } else {
       document.getElementById("caseList").innerHTML =
         '<div class="no-cases">❌ scenario.csvの読込に失敗しました。</div>';
@@ -2167,51 +2537,6 @@ document.getElementById("syncBtn").addEventListener("click", () => {
   url.searchParams.set('restart', 'true');   // 既存のクエリは保持
   location.href = url.toString();            // ハッシュ(#)も保持
 });
-
-function toggleTTS() {
-  TTS_ENABLED = !TTS_ENABLED;
-  
-  // 両方のボタンを更新
-  const btn1 = document.getElementById("ttsToggle");
-  const btn2 = document.getElementById("ttsToggle2");
-  const text = `音声: ${TTS_ENABLED ? "ON" : "OFF"}`;
-  const className = TTS_ENABLED ? "btn active" : "btn";
-  
-  btn1.textContent = text;
-  btn1.className = className;
-  btn2.textContent = text;
-  btn2.className = className;
-  
-  // スライダーの有効/無効を切り替え
-  const sliders = [
-    document.getElementById("rateSlider").parentElement,
-    document.getElementById("masterVolumeSlider").parentElement,
-    document.getElementById("ttsVolumeSlider").parentElement,
-    document.getElementById("sfxVolumeSlider").parentElement,
-    document.getElementById("noiseVolumeSlider").parentElement,
-    document.getElementById("voiceSel")
-  ];
-  
-  sliders.forEach(el => {
-    if (TTS_ENABLED) {
-      el.classList.remove('disabled');
-    } else {
-      el.classList.add('disabled');
-    }
-  });
-  
-  if (TTS_ENABLED) {
-    ensureAudio();
-    startTimeSignal();
-  } else {
-    stopTimeSignal();
-    if ('speechSynthesis' in window) {
-        speechSynthesis.cancel();
-    }
-  }
-  
-  saveSettings(); // ★★★ これが呼ばれているか確認 ★★★
-}
 
 // 両方のボタンに同じ関数を割り当て
 document.getElementById("ttsToggle").addEventListener("click", toggleTTS);

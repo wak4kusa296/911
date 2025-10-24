@@ -2,12 +2,9 @@ section,id,condition,probability,phase,message,params
 # ==========================================
 # パラメータ定義
 # ==========================================
-PARAM,directions,,,,,北;南;東;西;北東;北西;南東;南西;幹線12号;湾岸23号
+PARAM,directions,,,,,北;南;東;西;北東;北西;南東;南西
 PARAM,vehicles,,,,,白いセダン;黒いワンボックス;銀色の軽自動車;赤いスポーツカー;青いSUV;グレーのミニバン
-PARAM,escalate_reasons,,,,,容疑者が凶器所持;複数の容疑者を確認;被害者に重傷者あり;周辺への影響拡大;通行人への危険性
-PARAM,weapons,,,,,刃物;鉄パイプ;バット;拳銃らしき物
-PARAM,special_units,,,,,管区機動隊
-PARAM,zones,,,,,1丁目;2丁目;3丁目;みなと通り;幹線12号;湾岸23号;中央公園;駅前広場;商業地区
+PARAM,zones,,,,,1丁目;2丁目;3丁目;みなと通り;幹線12号;湾岸23号;商業地区
 PARAM,units_investigation,,,,,捜査301;捜査302;捜査303;捜査304
 PARAM,units_traffic,,,,,交機201;交機202;交機203;交機204
 PARAM,units_patrol,,,,,遊撃101;遊撃102;遊撃103;遊撃104
@@ -15,169 +12,377 @@ PARAM,units_backup,,,,,中央201;中央202;中央203;中央204;中央205;中央2
 # ==========================================
 # シナリオ定義
 # ==========================================
-LEVEL,Lv1,,,,,
-# ▼▼▼ ここの new_case,0.15 を new_case,0 に変更 ▼▼▼
-  NAME,交通違反取締,,,,,type=traffic_violation;level=1
-    NODE,1,new_case,0.35,派遣要請,{commander}から{unit}、{zone}、{type_ja}の110番通報。至急現場へ転進せよ。,need-response=true
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}方向へ移動中。到着予定{#eta:2-8}分。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現場到着。{状況確認中/対象車両を確認/違反車両を停止}。,
-          NODE,4,default,0.75,処理完了,{unit}から{commander}、{処理完了/違反切符交付完了}。巡回警戒へ戻ります。,clear=true
-          NODE,4,rand<0.25,0.25,被疑者確保,{unit}から{commander}、運転手が無免許運転。現行犯逮捕します。,
-            NODE,5,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
-  
-NAME,駐車違反取締,,,,,type=parking_violation;level=1
-    NODE,1,new_case,0.25,派遣要請,{commander}から{unit}、{zone}付近、{type_ja}。確認願いたい。,need-response=true
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。現場へ向かいます。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。{違反車両を確認/駐車禁止区域に車両あり}。,
-          NODE,4,default,1.0,処理完了,{unit}から{commander}、{ステッカー貼付完了/取り締まり完了}。,clear=true
- 
- NAME,巡回警戒,,,,,type=patrol;level=1
-    NODE,1,new_case,0.20,派遣要請,{commander}から{unit}、{zone}周辺の巡回警戒を実施せよ。,need-response=true
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}へ向かいます。,
-        NODE,3,default,0.8,臨場済み,{unit}から{commander}、{zone}周辺を巡回中。{異常なし/特に問題なし}。,
-          NODE,4,default,1.0,処理完了,{unit}から{commander}、巡回完了。待機に戻ります。,clear=true
-        NODE,3,rand<0.2,0.2,臨場済み,{unit}から{commander}、{zone}で不審な人物を発見。職務質問を実施します。,
-          NODE,4,rand<0.7,0.7,処理完了,{unit}から{commander}、確認完了。{問題なし/一般市民でした}。巡回を継続します。,clear=true
-          NODE,4,rand<0.3,0.3,被疑者確保,{unit}から{commander}、所持品検査の結果、{薬物/盗品}を発見。現行犯逮捕します。,
-            NODE,5,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
-LEVEL,Lv2,,,,,
-  NAME,交通事故対応,,,,,type=traffic_accident;level=2
-    NODE,1,new_case,0.35.,派遣要請,{commander}から{unit}、{zone}付近、{type_ja}。対応願いたい。,need-response=true
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、{zone}へ向かっております。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。{負傷者{#num:1-3}名を確認/車両{#num:2-4}台が関与/状況確認中}。,
-          NODE,4,rand<0.20,0.20,応援要請,{unit}から{commander}、{zone}にて応援要請。人員の追加が必要です。,need-response=true
-              NODE,5,has_units,1.0,応援派遣済み,{commander}から{backup_unit}、{zone}へ応援に向かえ。,
-                NODE,6,default,1.0,臨場済み,{backup_unit}から{commander}、現着。{unit}と連携します。,
-                  NODE,7,default,1.0,処理完了,{unit}から{commander}、{backup_unit}と共に処理完了。現場を引き渡します。,clear=true
-          
- 
- NAME,不審者通報,,,,,type=suspicious;level=2
-    NODE,1,new_case,0.18,派遣要請,{commander}から{unit}、{zone}、不審者の通報あり。確認せよ。,need-response=true
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}へ向かいます。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。{不審者を発見/該当人物を確認}。職務質問を実施します。,
-          NODE,4,rand<0.6,0.6,処理完了,{unit}から{commander}、確認の結果、問題なし。{一般市民でした/通報は誤認でした}。,clear=true
-          NODE,4,rand<0.25,0.25,被疑者確保,{unit}から{commander}、所持品から{#weapons}を発見。{銃刀法違反/凶器準備集合罪}で現行犯逮捕。,
-            NODE,5,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
-          NODE,4,rand<0.15,0.15,被疑者逃走,{unit}から{commander}、容疑者が逃走。{#directions}方向へ向かっている。,
-            NODE,5,default,0.7,被疑者確保,{unit}から{commander}、容疑者を{#num:50-200}メートル先で確保。,
-              NODE,6,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
-            NODE,5,rand<0.3,0.3,処理完了,{unit}から{commander}、容疑者を見失いました。捜索を継続します。,clear=true
- 
- NAME,窃盗事件捜査,,,,,type=theft;level=2
-    NODE,1,new_case,0.15,派遣要請,{commander}から{unit}、{zone}、{type_ja}の通報あり。現場確認せよ。,need-response=true
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}へ向かいます。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。被害状況を確認中。{店舗から商品/住宅から現金/車上から荷物}が盗まれた模様。,
-          NODE,4,rand<0.4,0.4,臨場済み,{unit}から{commander}、防犯カメラ映像を確認中。容疑者の特定を試みます。,
-            NODE,5,rand<0.5,0.5,被疑者確保,{unit}から{commander}、容疑者を特定。{#num:1-2}名を緊急逮捕します。,
-               NODE,6,default,1.0,処理完了,{unit}から{commander}、容疑者{#num:1-2}名を確保。署へ護送します。,clear=true
-            NODE,5,default,0.5,処理完了,{unit}から{commander}、容疑者の特定に至らず。捜査を継続します。,clear=true
-          NODE,4,default,0.6,処理完了,{unit}から{commander}、被害届受理。{鑑識班を要請/捜査を継続}します。,clear=true
- 
- NAME,口論トラブル,,,,,type=dispute;level=2
-    NODE,1,new_case,0.12,派遣要請,{commander}から{unit}、{zone}、口論の通報。仲裁願いたい。,need-response=true
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。現場へ向かいます。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。当事者{#num:2-4}名を確認。状況を聴取中。,
-          NODE,4,rand<0.75,0.75,処理完了,{unit}から{commander}、{仲裁完了/双方和解}。現場を離れます。,clear=true
-          NODE,4,rand<0.20,0.20,応援要請,{unit}から{commander}、状況が悪化。一方が{#weapons}を所持。応援を要請します。,need-response=true
-            NODE,5,has_units,1.0,応援派遣済み,{commander}から{backup_unit}、{zone}へ緊急出動せよ。,
-              NODE,6,default,1.0,臨場済み,{backup_unit}から{commander}、現着。{unit}と連携し制圧します。,
-                 NODE,7,default,1.0,被疑者確保,{unit}から{commander}、{backup_unit}と連携し暴行罪で{#num:1-2}名を現行犯逮捕。,
-                  NODE,8,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送。現場処理完了。,clear=true
-          NODE,4,rand<0.05,0.05,強行突破,{unit}から{commander}、一方が暴力行為。直ちに制圧します。,
-            NODE,5,default,1.0,被疑者確保,{unit}から{commander}、暴行容疑で{#num:1-2}名を現行犯逮捕。,
-              NODE,6,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
 
-LEVEL,Lv3,,,,,
-  NAME,強盗事件対応,,,,,type=robbery;level=3
-    NODE,1,new_case,0.06,派遣要請,{commander}から{unit}、{zone}、{type_ja}。緊急出動せよ。,"alert=beep;need-response=true"
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。現場へ{急行中/緊急走行で向かっております}。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。容疑者{#num:1-3}名を{視認/確認}。{#weapons}を所持している模様。,
-          NODE,4,rand<0.15,0.15,応援要請,{unit}から{commander}、事案が拡大。{#escalate_reasons}。レベル4に格上げを要請。,need-response=true
-            NODE,5,default,1.0,特殊部隊派遣要請,{commander}から鑑識、{zone}へ至急出動せよ。,need-response=true
-              NODE,6,default,1.0,臨場済み,鑑識から{commander}、現着。{unit}と連携し対応します。,
-                NODE,7,default,1.0,被疑者確保,{unit}、容疑者{#num:1-3}名を確保。,
-                  NODE,8,default,1.0,処理完了,{unit}から{commander}、処理完了。,clear=true
-          NODE,4,rand<0.55,0.55,応援要請,{unit}から{commander}、{zone}にて応援要請。至急支援願いたい。,need-response=true
-            NODE,5,has_units,1.0,応援派遣済み,{commander}から{backup_unit}、{zone}、応援要請あり。至急現場へ転進せよ。,
-              NODE,6,default,1.0,臨場済み,{backup_unit}から{commander}、現着。{unit}と合流しました。,
-                NODE,7,rand<0.85,0.85,被疑者確保,{unit}から{commander}、{backup_unit}と連携し容疑者{#num:1-3}名を確保。{抵抗なし/取り押さえ完了}。,
-                  NODE,8,default,1.0,処理完了,{unit}から{commander}、処理完了。容疑者を署へ護送します。,clear=true
-                NODE,7,rand<0.15,0.15,被疑者逃走,{unit}から{commander}、容疑者が逃走。{#directions}方向へ{#vehicles}で逃走中。,
-                  NODE,8,default,1.0,応援要請,{commander}から全車両、{zone}から容疑車両逃走中。車種{#vehicles}。発見次第報告せよ。,"need-response=true;alert=beep;backup-all=true"
-                    NODE,9,rand<0.75,0.75,被疑者確保,{backup_unit}から{commander}、容疑車両を発見。停止させ、容疑者{#num:1-3}名を確保。,
-                      NODE,10,default,1.0,処理完了,{backup_unit}から{commander}、容疑者を署へ護送します。,clear=true
-          NODE,4,rand<0.30,0.30,被疑者確保,{unit}から{commander}、単独で容疑者{#num:1-2}名を確保。,
-            NODE,5,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
- 
- NAME,ひき逃げ事件,,,,,type=hit_and_run;level=3
-    NODE,1,new_case,0.05,派遣要請,{commander}から全車両、緊急配備。{zone}付近で{type_ja}。該当区域の全車両は直ちに警戒態勢に入れ。,"need-response=true;backup-all=true;alert=beep"
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}周辺を警戒します。,
-        NODE,3,rand<0.6,0.6,臨場済み,{unit}から{commander}、該当車両を発見。{#vehicles}、ナンバー{#num:1000-9999}。停止を求めます。,
-          NODE,4,rand<0.5,0.5,被疑者逃走,{unit}から{commander}、車両が逃走を試みています。{#directions}方向へ追跡中。,
-            NODE,5,default,0.75,被疑者確保,{unit}から{commander}、車両を停止。運転手を確保しました。負傷者への救護義務違反で逮捕します。,
-               NODE,6,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
-            NODE,5,rand<0.25,0.25,処理完了,{unit}から{commander}、車両を見失いました。{ナンバーを控えております/広域手配を要請します}。,clear=true
-          NODE,4,default,0.5,被疑者確保,{unit}から{commander}、運転手が停止に応じました。任意同行を求めます。,
-            NODE,5,default,1.0,処理完了,{unit}から{commander}、運転手を署へ同行。取り調べを開始します。,clear=true
-        NODE,3,rand<0.4,0.4,処理完了,{unit}から{commander}、該当車両発見できず。捜査を継続します。,clear=true
- 
- NAME,傷害事件,,,,,type=assault;level=3
-    NODE,1,new_case,0.08,派遣要請,{commander}から{unit}、{zone}、{type_ja}の通報。緊急出動せよ。,"alert=beep;need-response=true"
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}へ急行します。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。被害者{#num:1-2}名を確認。{#weapons}による傷害の模様。,
-          NODE,4,rand<0.45,0.45,臨場済み,{unit}から{commander}、加害者が現場に残存。{#num:1-2}名を確認。,
-            NODE,5,rand<0.80,0.80,被疑者確保,{unit}から{commander}、加害者{#num:1-2}名を現行犯逮捕。,
-               NODE,6,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送。被害者は救急搬送されました。,clear=true
-            NODE,5,rand<0.20,0.20,被疑者逃走,{unit}から{commander}、加害者が逃走。{#directions}方向へ向かっている。,
-              NODE,6,rand<0.7,0.7,被疑者確保,{unit}から{commander}、加害者を{#num:100-500}メートル先で確保。,
-                NODE,7,default,1.0,処理完了,{unit}から{commander}、容疑者を署へ護送します。,clear=true
-              NODE,6,rand<0.3,0.3,応援要請,{unit}から{commander}、加害者を見失いました。応援を要請します。,need-response=true
-                NODE,7,has_units,1.0,応援派遣済み,{commander}から{backup_unit}、{zone}周辺を捜索せよ。,
-                  NODE,8,rand<0.6,0.6,被疑者確保,{backup_unit}から{commander}、容疑者を発見。確保しました。,
-                     NODE,9,default,1.0,処理完了,{backup_unit}から{commander}、容疑者を署へ護送します。,clear=true
-                  NODE,8,rand<0.4,0.4,処理完了,{commander}から{backup_unit}、容疑者を発見できず。広域手配します。,clear=true
-          NODE,4,default,0.55,処理完了,{unit}から{commander}、加害者はすでに逃走。被害者からの聴取を実施。捜査を開始します。,clear=true
- 
- NAME,突発デモ発生,,,,,type=demonstration;level=3
-    NODE,1,new_case,0.05,派遣要請,{commander}から{unit}、{zone}にて突発的なデモ発生の模様。現場の状況を確認せよ。,"alert=beep;need-response=true"
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}へ向かいます。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。参加者およそ{#num:50-200}名。{大きな混乱はなし/指導に従い解散の見込み}。,
-          NODE,4,default,0.6,処理完了,{unit}から{commander}、デモ隊は解散しました。周辺警戒に移行します。,clear=true
-          NODE,4,rand<0.4,0.4,応援要請,{unit}から{commander}、参加者が増加中。交通整理と周辺警備のため応援を要請。管区機動隊の出動が必要。,need-response=true
-            NODE,5,has_units,1.0,応援派遣済み,{commander}から管区機動隊、{zone}へ出動。{unit}と連携し警備にあたれ。,add_units=管区機動隊
-              NODE,6,default,1.0,臨場済み,管区機動隊から{commander}、現着。警備体制を構築します。,
-                NODE,7,rand<0.7,0.7,処理完了,管区機動隊から{commander}、デモ隊は解散。異常なし。,clear=true
-                NODE,7,rand<0.3,0.3,応援要請,管区機動隊から{commander}、一部が暴徒化。公務執行妨害が発生。制圧を開始します。,need-response=true
-                  NODE,8,default,1.0,被疑者確保,管区機動隊から{commander}、首謀者{#num:1-3}名を確保。公務執行妨害で現行犯逮捕。,
-                    NODE,9,default,1.0,処理完了,管区機動隊から{commander}、状況は鎮圧完了。引き続き周辺警戒を実施します。,clear=true
+4.0,交通違反取締,,,,,type=traffic;level=1
+  1.0,通報受理,"{commander}から{unit}。{zone}において{type_ja}の110番入電。至急、現場へ転進されたい。どうぞ。","need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。{zone}に向け転進中。現着予定、{#eta:2-8}分後。どうぞ。",
+      1.0,現着・状況報告,"{unit}から{commander}、現着。{状況確認中/対象車両を確認/違反車両を停止させた}。どうぞ。",
+        0.75,処理完了,"{unit}から{commander}、{処理完了/違反切符交付完了}。これより警邏に戻る。以上、{unit}。",
+        0.25,無免許運転発覚,"{unit}から{commander}、対象車両の運転手、無免許運転判明。現行犯逮捕する。どうぞ。",
+          1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。以上、{unit}。",
 
-LEVEL,Lv4,,,,,
-  NAME,人質立てこもり事件,,,,,type=hostage;level=4
-    NODE,1,new_case,0.02,派遣要請,{commander}から全車両、緊急事態。{zone}で{type_ja}。最優先で現場へ向かえ。,"need-response=true;alert=beep;backup-all=true"
-      NODE,2,awaiting_response,1.0,特殊部隊派遣要請,{commander}からSATおよび管区機動隊、{zone}へ至急出動せよ。詳細は{unit}と連携せよ。,add_units=SAT・管区機動隊;need-response=true
-        NODE,3,default,1.0,臨場済み,SATから{commander}、現着。管区機動隊と連携し現場を包囲。人質{#num:2-8}名を確認。,
-          NODE,4,rand<0.60,0.60,交渉中,SATから{commander}、犯人と交渉を開始。人質の安全確保を最優先とします。,
-            NODE,5,rand<0.70,0.70,処理完了,SATから{commander}、交渉成立。人質全員無事救出。犯人{#num:1-2}名を確保。,clear=true
-            NODE,5,rand<0.30,0.30,強行突破,SATから{commander}、交渉決裂。強行突入を開始します。,
-               NODE,6,default,1.0,処理完了,SATから{commander}、制圧完了。人質{#num:2-8}名を救出。犯人{#num:1-2}名を確保。{軽傷者{#num:0-2}名/全員無事}。,clear=true
-          NODE,4,rand<0.40,0.40,強行突破,SATから{commander}、人質に危険が迫っている。直ちに強行突入します。,
-            NODE,5,default,1.0,処理完了,SATから{commander}、制圧完了。人質{#num:2-8}名を救出。犯人{#num:1-2}名を確保。,clear=true
- 
- NAME,不審物発見,,,,,type=suspicious_object;level=3
-    NODE,1,new_case,0.04,派遣要請,{commander}から{unit}、{zone}で{type_ja}の通報。現場を封鎖せよ。周辺車両は迂回せよ。,"alert=beep;need-response=true"
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。現場へ向かいます。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。現場を封鎖しました。半径{#num:50-200}メートルを立入禁止とします。,
-          NODE,4,default,1.0,特殊部隊派遣要請,{unit}から{commander}、爆発物処理班および管区機動隊の出動を要請します。,"add_units=爆発物処理班・管区機動隊;escalate_level=4;alert=beep;need-response=true"
-            NODE,5,default,1.0,臨場済み,爆発物処理班から{commander}、現着。管区機動隊と連携し現場の封鎖を維持、不審物の確認を開始します。,
-              NODE,6,rand<0.65,0.65,処理完了,爆発物処理班から{commander}、確認の結果、危険物ではありませんでした。{遺失物/いたずら}と判断。封鎖を解除します。,clear=true
-              NODE,6,rand<0.30,0.30,処理完了,爆発物処理班から{commander}、爆発物を確認。遠隔操作により安全に処理しました。封鎖を解除します。,clear=true
-              NODE,6,rand<0.05,0.05,処理完了,爆発物処理班から{commander}、処理中に小規模な爆発が発生。{負傷者なし/隊員に軽傷}。現場を安全確認後、封鎖を解除します。,clear=true
+4.0,駐車違反取締,,,,,type=traffic;level=1
+  1.0,通報受理,"{commander}から{unit}。{zone}付近における{type_ja}の通報。状況確認されたい。どうぞ。","need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。現場へ転進する。どうぞ。",
+      1.0,現着・状況報告,"{unit}から{commander}、現着した。{違反車両を確認/駐車禁止区域に車両あり}。どうぞ。",
+        1.0,処理完了,"{unit}から{commander}、{標章貼付完了/取り締まり完了}。以上、{unit}。",
 
-  NAME,多数傷病者事案,,,,,type=mass_casualty;level=4
-    NODE,1,new_case,0.03,派遣要請,{commander}から{unit}、{zone}で多数傷病者事案発生。{type_ja}の可能性。至急現場へ向かえ。,"alert=beep;need-response=true"
-      NODE,2,awaiting_response,1.0,急行中,{unit}から{commander}、了解。{zone}へ緊急走行で向かっております。,
-        NODE,3,default,1.0,臨場済み,{unit}から{commander}、現着。{#num:5-15}名の傷病者を確認。応急手当を開始します。,
-          NODE,4,default,1.0,応援要請,{unit}から{commander}、大規模応援を要請。事件現場医療派遣チームが必要です。,"need-response=true"
-            NODE,5,has_units,1.0,応援派遣済み,{commander}から管内全車両、{zone}へ応援に向かえ。事件現場医療派遣チームおよび管区機動隊も出動せよ。,add_units=事件現場医療派遣チーム・管区機動隊"alert=beep;backup-all=true"
-              NODE,6,default,1.0,臨場済み,事件現場医療派遣チームから{commander}、現着。{unit}と連携し救護活動を実施します。,
-                NODE,7,default,1.0,処理完了,{unit}から{commander}、{backup_unit}と共に全傷病者の搬送完了。重傷者{#num:1-5}名、軽傷者{#num:3-10}名。現場処理完了。,clear=true
+4.0,巡回警戒,,,,,type=patrol;level=1
+  1.0,指令,"{commander}から{unit}。{zone}周辺の警邏を強化されたい。どうぞ。","need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。{zone}へ転進する。どうぞ。",
+      0.8,巡回報告,"{unit}から{commander}、{zone}周辺、警邏中。{異常なし/特異事項なし}。どうぞ。",
+        1.0,巡回完了,"{unit}から{commander}、警邏終了。待機状態に戻る。以上、{unit}。",
+      0.2,不審者発見,"{unit}から{commander}、{zone}において不審者発見。これより職質を実施する。どうぞ。",
+        0.7,職質完了（異常なし）,"{unit}から{commander}、職質完了。{特異事項なし/一般人であった}。引き続き警邏を継続する。以上、{unit}。",
+        0.3,違法所持品発見,"{unit}から{commander}、所持品検査の結果、{違法薬物/盗難品}を発見。現行犯逮捕する。どうぞ。",
+          1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。以上、{unit}。",
+
+4.0,交通事故対応,,,,,type=traffic;level=1
+  1.0,通報受理,"{commander}から{unit}。{zone}付近、{type_ja}発生の模様。現場へ転進し、対応されたい。どうぞ。","need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。{zone}へ転進中。どうぞ。",
+      1.0,現着・状況報告,"{unit}から{commander}、現着した。{負傷者{#num:1-3}名を確認/車両{#num:2-4}台が関係する模様/現在、状況確認中}。どうぞ。",
+        0.2,応援要請,"{unit}から{commander}、{zone}、応援を要請する。交通整理および実況見分のため、人員の増強を願いたい。どうぞ。","need-response=true"
+          1.0,応援派遣,"{commander}から{backup_unit}。{zone}へ転進し、{unit}の支援にあたられたい。どうぞ。",
+            1.0,応援現着,"{backup_unit}から{commander}、現着。{unit}と合流、連携して対応する。どうぞ。",
+              1.0,処理完了（応援あり）,"{unit}から{commander}、{backup_unit}と共に事故処理完了。現場はレッカー業者に引き継ぐ。以上、{unit}。",
+        0.8,処理完了（単独）,"{unit}から{commander}、事故処理完了。現場を引き継ぐ。以上、{unit}。",
+
+4.0,不審者通報,,,,,type=patrol;level=1
+  1.0,通報受理,"{commander}から{unit}。{zone}において不審者情報あり。現場へ転進し、確認されたい。どうぞ。","need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。{zone}へ転進する。どうぞ。",
+      1.0,現着・職質開始,"{unit}から{commander}、現着。{通報内容と類似の人物を発見/該当人物を確認}。これより職質を実施する。どうぞ。",
+        0.6,職質完了（異常なし）,"{unit}から{commander}、職質の結果、特異事項なし。{一般人であった/通報は誤認の模様}。以上、{unit}。",
+        0.25,違法所持品発見,"{unit}から{commander}、所持品検査により「刃物」を発見。銃刀法違反の現行犯で逮捕する。どうぞ。",
+          1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。以上、{unit}。",
+        0.15,対象者逃走,"{unit}から{commander}、対象者、職質を振り切り逃走。{#directions}方向へ逃走中。どうぞ。",
+          0.7,追跡・確保,"{unit}から{commander}、逃走した対象者を{#num:50-200}メートル先で確保した。どうぞ。",
+            1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。以上、{unit}。",
+          0.3,追跡・見失う,"{unit}から{commander}、対象者を見失った。引き続き周辺を捜索する。以上、{unit}。",
+
+4.0,窃盗事件捜査,,,,,type=investigation;level=1
+  1.0,通報受理,"{commander}から{unit}。{zone}において{type_ja}入電。現場へ転進し、状況を確認されたい。どうぞ。","need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。{zone}へ転進する。どうぞ。",
+      1.0,現着・状況報告,"{unit}から{commander}、現着。被害状況を確認中。{店舗から商品/住宅から現金/車上から荷物}が窃取された模様である。どうぞ。",
+        0.4,防犯カメラ確認,"{unit}から{commander}、現在、防犯カメラの映像を確認中。マル被の特定にあたっている。どうぞ。",
+          0.5,容疑者特定・逮捕,"{unit}から{commander}、マル被{#num:1-2}名を特定。緊急逮捕する。どうぞ。",
+            1.0,逮捕・護送,"{unit}から{commander}、マル被{#num:1-2}名を確保した。{#directions}署へ護送する。以上、{unit}。",
+          0.5,特定至らず,"{unit}から{commander}、マル被の特定に至らず。引き続き捜査を継続する。以上、{unit}。",
+
+4.0,口論トラブル,,,,,type=patrol;level=1
+  1.0,通報受理,"{commander}から{unit}。{zone}において口論の通報あり。現場へ転進し、仲裁されたい。どうぞ。","need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。現場へ転進する。どうぞ。",
+      1.0,現着・状況聴取,"{unit}から{commander}、現着。当事者{#num:2-4}名を確認。現在、事情聴取中。どうぞ。",
+        0.75,仲裁完了,"{unit}から{commander}、{仲裁完了/双方和解した}。現場を離れる。以上、{unit}。",
+        0.2,状況悪化・応援要請,"{unit}から{commander}、状況悪化。当事者の一名が「刃物」を所持している模様。至急、応援願いたい。どうぞ。","need-response=true"
+          1.0,応援派遣,"{commander}から{backup_unit}。{zone}へ至急転進せよ。どうぞ。",
+            1.0,応援現着,"{backup_unit}から{commander}、現着。{unit}と合流、対象の制圧にあたる。どうぞ。",
+              1.0,制圧・逮捕,"{unit}から{commander}、{backup_unit}と連携。暴行の容疑で{#num:1-2}名を現行犯逮捕した。どうぞ。",
+                1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。現場の扱いは完了。以上、{unit}。",
+        0.05,暴力行為発生,"{unit}から{commander}、当事者の一名が暴力行為に及んだ。直ちに制圧する。どうぞ。",
+          1.0,制圧・逮捕,"{unit}から{commander}、暴行容疑で{#num:1-2}名を現行犯逮捕した。どうぞ。",
+            1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。以上、{unit}。",
+
+2.0,強盗事件,,,,,type=investigation;level=3
+  1.0,通報受理,"至急至急。{commander}から{unit}。{zone}において{type_ja}発生。至急、現場へ転進されたい。どうぞ。","alert=beep;need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。現場へ{急行中/緊急走行にて転進中}。どうぞ。",
+      1.0,現着・状況報告,"{unit}から{commander}、現着。マル被{#num:1-3}名を{視認/確認}。「刃物」を所持している模様である。どうぞ。",
+        0.7,応援要請,"{unit}から{commander}、{zone}、応援を要請する。マル被が抵抗、至急支援願いたい。どうぞ。","need-response=true"
+          1.0,応援派遣,"{commander}から{backup_unit}。{zone}、{unit}が応援要請。至急現場へ転進されたい。どうぞ。","need-response=true"
+            1.0,応援現着,"{backup_unit}から{commander}、現着。{unit}と合流した。どうぞ。",
+              0.85,共同制圧・確保,"{unit}から{commander}、{backup_unit}と連携し、マル被{#num:1-3}名を確保した。{抵抗なし/制圧完了}。どうぞ。",
+                1.0,逮捕・護送,"{unit}から{commander}、扱い完了。マル被を{#directions}署へ護送する。以上、{unit}。",
+              0.15,容疑者逃走,"{unit}から{commander}、マル被が{#vehicles}に乗車し逃走。{#directions}方向へ逃走中。どうぞ。",
+                1.0,緊急配備,"至急至急。{commander}から各局。{zone}よりマル被の乗車した{#vehicles}が{#directions}方向へ逃走中。各局、厳重に警戒し、発見次第、一報されたい。どうぞ。","need-response=true;alert=beep;backup-all=true"
+                  0.75,逃走車両発見・確保,"{backup_unit}から{commander}、逃走車両を発見。進路を妨害し停止させた。マル被{#num:1-3}名を確保。どうぞ。",
+                    1.0,逮捕・護送,"{backup_unit}から{commander}、マル被を{#directions}署へ護送する。以上、{backup_unit}。",
+                  0.25,逃走車両見失う,"{backup_unit}から{commander}、対象車両を見失った。捜索を継続する。以上、{backup_unit}。",
+        0.3,単独確保,"{unit}から{commander}、マル被{#num:1-2}名を確保した。どうぞ。",
+          1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。以上、{unit}。",
+
+2.0,ひき逃げ事件,,,,,type=traffic;level=3
+  1.0,緊急配備,"至急至急。{commander}から各局。{zone}付近において{type_ja}入電。緊急配備を発令する。各局は厳重に警戒されたい。どうぞ。","need-response=true;backup-all=true;alert=beep"
+    1.0,応答・警戒,"{unit}から{commander}、了解。{zone}周辺の警邏にあたる。どうぞ。",
+      0.6,対象車両発見,"{unit}から{commander}、マル被車両と思われる{#vehicles}、ナンバー{#num:1000-9999}を発見。これより停止を求める。どうぞ。",
+        0.5,車両逃走・追跡,"{unit}から{commander}、対象車両、停止に応じず逃走。{#directions}方向へ追跡中。どうぞ。",
+          0.75,追跡・確保,"{unit}から{commander}、対象車両を停止させた。運転手を救護義務違反の現行犯で逮捕する。どうぞ。",
+            1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。以上、{unit}。",
+          0.25,追跡・見失う,"{unit}から{commander}、対象車両を見失った。{ナンバーは確認済み/広域手配を要請}する。以上、{unit}。",
+        0.5,車両停止・任意同行,"{unit}から{commander}、対象車両、停止に応じた。運転手に任意同行を求める。どうぞ。",
+          1.0,任意同行・捜査開始,"{unit}から{commander}、運転手を{#directions}署へ任意同行。取り調べを開始する。以上、{unit}。",
+      0.4,発見至らず,"{unit}から{commander}、マル被車両、発見に至らず。引き続き捜査を継続する。以上、{unit}。",
+
+3.0,傷害事件,,,,,type=backup;level=2
+  1.0,通報受理,"{commander}から{unit}。{zone}において{type_ja}入電。至急、現場へ転進されたい。どうぞ。","need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。{zone}へ至急転進する。どうぞ。",
+      1.0,現着・状況報告,"{unit}から{commander}、現着。被害者{#num:1-2}名を確認。「刃物」による傷害事案の模様である。どうぞ。",
+        0.45,容疑者残存,"{unit}から{commander}、マル被が現場に残存している。{#num:1-2}名を確認。どうぞ。",
+          0.8,現行犯逮捕,"{unit}から{commander}、マル被{#num:1-2}名を傷害の現行犯で逮捕した。どうぞ。",
+            1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送。被害者は救急隊により病院搬送済み。以上、{unit}。",
+          0.2,容疑者逃走,"{unit}から{commander}、マル被が逃走。{#directions}方向へ逃走中。どうぞ。",
+            0.7,追跡・確保,"{unit}から{commander}、マル被を{#num:100-500}メートル先で確保した。どうぞ。",
+              1.0,逮捕・護送,"{unit}から{commander}、マル被を{#directions}署へ護送する。以上、{unit}。",
+            0.3,追跡・見失う（応援要請）,"{unit}から{commander}、マル被を見失った。応援を要請する。どうぞ。","need-response=true"
+              1.0,応援派遣,"{commander}から{backup_unit}。{zone}周辺を捜索されたい。どうぞ。",
+                1.0,応援による確保,"{backup_unit}から{commander}、マル被を発見、確保した。どうぞ。",
+                  1.0,逮捕・護送,"{backup_unit}から{commander}、マル被を{#directions}署へ護送する。以上、{backup_unit}。",
+                1.0,発見至らず（広域手配）,"{commander}から{backup_unit}、了解。マル被の発見に至らず。広域手配に切り替える。以上、{commander}。",
+        0.55,容疑者逃走後,"{unit}から{commander}、マル被は既に現場から逃走。被害者からの聴取を実施。これより捜査を開始する。以上、{unit}。",
+
+2.0,突発デモ発生,,,,,type=backup;level=2
+  1.0,通報受理,"至急至急。{commander}から{unit}。{zone}において突発的なデモ発生の模様。現場へ転進し、状況を確認されたい。どうぞ。","alert=beep;need-response=true"
+    1.0,応答・転進,"{unit}から{commander}、了解。{zone}へ転進する。どうぞ。",
+      1.0,現着・状況報告,"{unit}から{commander}、現着。参加者、約{#num:50-200}名。{現在、大きな混乱なし/説得により解散する模様}。どうぞ。",
+        0.6,解散確認,"{unit}から{commander}、集団は解散した。引き続き周辺の警邏にあたる。以上、{unit}。",
+        0.4,状況悪化・応援要請,"{unit}から{commander}、参加者が増加中。交通整理および警備のため応援を要請する。どうぞ。","need-response=true"
+          1.0,応援派遣,"{commander}から{backup_unit}。{zone}へ出動されたい。{unit}と連携し、警備を実施せよ。どうぞ。",
+            1.0,応援現着,"{backup_unit}から{commander}、現着。これより警備体制を構築する。どうぞ。",
+              0.7,解散確認（応援）,"{backup_unit}から{commander}、集団は解散した。特異事項なし。以上、{backup_unit}。",
+              0.3,暴徒化・制圧,"{backup_unit}から{commander}、集団の一部が暴徒化。公務執行妨害が発生した。これより制圧を開始する。どうぞ。","need-response=true"
+                1.0,制圧・逮捕,"{backup_unit}から{commander}、首謀者{#num:1-3}名を確保。公務執行妨害の現行犯で逮捕した。どうぞ。",
+                  1.0,鎮圧完了,"{backup_unit}から{commander}、状況は鎮圧完了。引き続き周辺の警邏にあたる。以上、{backup_unit}。",
+
+1.0,ハイジャック事案,,,,,type=backup;level=4
+  1.0,派遣要請,至急至急。{commander}から各局、航空管制局および運輸省より入電。国際線{#num:300-900}便がハイジャックされた模様。乗員乗客およそ{#num:100-150}名。犯人数不明。中央国際空港への着陸が予想される。関係各署は甲号体制準備。最優先の事案とする。,"need-response=true;alert=beep;backup-all=true"
+    1.0,体制発令,{commander}から中央国際空港警備所、甲号体制を発令する。空港ターミナルの即時封鎖、および滑走路周辺の厳戒態勢を実施されたい。どうぞ。,"need-response=true"
+      1.0,特殊部隊派遣,{commander}からSIT、管区機動隊、および爆発物処理班宛て。本件ハイジャック事案につき、中央国際空港へ至急転進せよ。現着次第、指揮本部を設置されたい。どうぞ。,add_units=SIT・管区機動隊・爆発物処理班;need-response=true
+        1.0,現場報告,{unit}から{commander}、了解。甲号体制完了。ターミナル封鎖および滑走路周辺の警戒態勢、実施中。どうぞ。,need-response=true
+          1.0,部隊現着,SITから{commander}、SIT先遣隊、中央国際空港現着。{unit}と合流し、指揮本部設置中。どうぞ。,
+            1.0,着陸情報,{commander}から各局、対象機、まもなく中央国際空港A滑走路に着陸する模様。全警戒員、厳戒態勢を維持。不用意な接近は厳禁。どうぞ。,need-response=true
+              1.0,着陸報告,{unit}から{commander}、対象機、A滑走路に着陸。現在、第{#num:2-4}駐機場へタキシング中。どうぞ。,
+                1.0,包囲完了,SITから{commander}、対象機、駐機場にて停止を確認。SITおよび機動隊により機体を完全包囲した。どうぞ。,need-response=true
+                  1.0,交渉開始指示,{commander}からSIT、機体の包囲を維持しつつ、犯人との交渉を開始されたい。人質の安全確保を最優先とせよ。どうぞ。,need-response=true
+                    1.0,交渉開始,SITから{commander}、了解。交渉班、犯人との接触を開始。犯人は{#num:3-5}名と推定。{国外への逃亡/政治的声明}を要求している模様。どうぞ。,
+                      0.60,交渉継続（人質解放）,{unit}から{commander}、SITの交渉により、人質のうち病人・子供{#num:5-10}名が解放された。タラップ車にて救護中。どうぞ。,
+                        1.0,交渉継続（膠着）,SITから{commander}、引き続き交渉中なるも、犯人側は態度を硬化。要求を繰り返すのみ。膠着状態である。どうぞ。,
+                          0.50,交渉決裂（突入準備）,SITから{commander}、犯人側、交渉を打ち切り。機内にて{爆発物/人質への危害}を示唆。これ以上の交渉は困難と思料される。突入準備を開始する。どうぞ。,need-response=true
+                            1.0,突入許可,{commander}からSIT、突入を許可する。人質の安全確保を最優先とし、速やかに制圧せよ。どうぞ。,
+                              1.0,突入実行,SITから{commander}、了解。突入を開始する。全隊突入。機内にて{閃光弾/発砲音}あり。どうぞ。,
+                                1.0,制圧完了,SITから{commander}、機内制圧完了。犯人{#num:3-5}名を確保。人質の救出を開始。機内、{負傷者{#num:2-8}名発生/人質全員無事}。どうぞ。,
+                                  1.0,クリアリング指示,{commander}から爆発物処理班および鑑識班、SITの制圧完了。爆発物処理班は機内の安全確認、鑑識班は現場臨場し、証拠保全を図られたい。どうぞ。,add_units=鑑識班;need-response=true
+                                    1.0,クリアリング報告,爆発物処理班から{commander}、機内クリアリング完了。危険物の発見には至らず。安全である。どうぞ。,need-response=true
+                                      1.0,鑑識活動,鑑識班から{commander}、現場臨場。機内の鑑識活動を開始する。どうぞ。,
+                                        1.0,状況終了,{commander}から各局、本件ハイジャック事案、状況終了。甲号体制を解き、通常業務に復帰されたい。以上、{commander}。,
+                          0.50,交渉成立,SITから{commander}、交渉成立。犯人側、投降に応じた。SITが機内に入り、犯人{#num:3-5}名の身柄を確保。人質全員無事。どうぞ。,
+                            1.0,クリアリング指示,{commander}から爆発物処理班および鑑識班、犯人確保。爆発物処理班は機内の安全確認、鑑識班は現場臨場し、証拠保全を図られたい。どうぞ。,add_units=鑑識班;need-response=true
+                              1.0,クリアリング報告,爆発物処理班から{commander}、機内クリアリング完了。危険物の発見には至らず。安全である。どうぞ。,need-response=true
+                                1.0,鑑識活動,鑑識班から{commander}、現場臨場。機内の鑑識活動を開始する。どうぞ。,
+                                  1.0,状況終了,{commander}から各局、本件ハイジャック事案、状況終了。甲号体制を解き、通常業務に復帰されたい。以上、{commander}。,
+                      0.40,交渉中（異常発生）,SITから{commander}、機内から{銃声/悲鳴}を聴取。人質に危害が及んだ可能性あり。大至急突入の許可を願いたい。どうぞ。,need-response=true
+                        1.0,突入許可,{commander}からSIT、突入を許可する。至急、人質を救出せよ。どうぞ。,
+                          1.0,突入実行,SITから{commander}、了解。全隊突入。機内制圧中。どうぞ。,
+                            0.70,制圧完了（爆発物発見）,SITから{commander}、制圧完了。犯人{#num:3-5}名確保。人質{#num:80-120}名、救出中。ただし、貨物室にて段ボールの不審物を発見。爆発物処理班の確認を要す。どうぞ。,need-response=true
+                              1.0,爆発物処理指示,{commander}から爆発物処理班、SITより不審物発見の報あり。至急、処理にあたられたい。どうぞ。,need-response=true
+                                1.0,爆発物処理中,爆発物処理班から{commander}、現着。対象物を{X線検査中/処理中}。爆発物と断定。処理を継続する。どうぞ。,
+                                  1.0,処理完了,爆発物処理班から{commander}、処理完了。安全を確保した。どうぞ。,need-response=true
+                                    1.0,鑑識指示,{commander}から鑑識班、現場の安全確保。速やかに臨場し、鑑識活動を開始されたい。どうぞ。,add_units=鑑識班;need-response=true
+                                      1.0,鑑識活動,鑑識班から{commander}、現場臨場。機内の鑑識活動を開始する。どうぞ。,
+                                        1.0,状況終了,{commander}から各局、本件ハイジャック事案、状況終了。甲号体制を解き、通常業務に復帰されたい。以上、{commander}。,
+                            0.30,制圧完了（負傷多発）,SITから{commander}、制圧完了。犯人{#num:3-5}名確保。人質救出中。ただし、犯人の抵抗により、人質およびSIT隊員に{重傷者{#num:1-3}名/負傷者{#num:5-10}名}発生。救急隊の増強を要請する。どうぞ。,need-response=true
+                              1.0,救急要請,{commander}から{unit}、消防に対し、救急隊の最大出場を要請されたい。どうぞ。,need-response=true
+                                1.0,救急要請報告,{unit}から{commander}、消防へ要請済み。救急隊順次現着中。どうぞ。,need-response=true
+                                  1.0,鑑識・処理指示,{commander}から爆発物処理班および鑑識班、爆発物処理班は機内の最終安全確認、鑑識班は現場臨場し、証拠保全を図られたい。どうぞ。,add_units=鑑識班;need-response=true
+                                    1.0,クリアリング報告,爆発物処理班から{commander}、機内クリアリング完了。他の危険物なし。どうぞ。,need-response=true
+                                      1.0,鑑識活動,鑑識班から{commander}、現場臨場。鑑識活動を開始する。どうぞ。,
+                                        1.0,状況終了,{commander}から各局、本件ハイジャック事案、状況終了。甲号体制を解き、通常業務に復帰されたい。以上、{commander}。,
+
+1.0,大規模施設爆発事案,,,,,type=backup;level=3
+  1.0,通報受理,"{commander}から{unit}。{zone}の大型商業施設において、「爆発音がした」「黒煙が見える」との通報多数入電中。至急現場へ急行し、状況を確認されたい。どうぞ。","need-response=true"
+    1.0,状況確認,"{unit}から{commander}、了解。{zone}へ急行する。どうぞ。",
+      0.7,第一報・爆発確認,"{unit}から{commander}、現場到着。{zone}、中央広場付近で爆発が発生した模様。黒煙が充満し、火災も発生。負傷者多数確認、現場はパニック状態。至急、応援及び消防・救急の緊急手配を願う。どうぞ。","need-response=true"
+        1.0,応援指示・レベルアップ,"{commander}から{unit}、了解。本件、レベル4事案に移行。{backup_unit}及び{#directions}署の全パトカーは現場へ急行。{unit}は負傷者の救護及び避難誘導を最優先。消防へも最大規模で要請する。どうぞ。","escalate_level=4;alert=beep;need-response=true"
+          1.0,応援受領,"{backup_unit}から{commander}、了解。現場へ急行する。どうぞ。",
+            1.0,現場状況報告,"{unit}から{commander}、了解。避難誘導を開始。負傷者は{#num:20-30}名以上とみられ、重傷者も含まれる模様。火勢が強く、延焼の危険あり。どうぞ。","need-response=true"
+              1.0,本部応答,"{commander}から{unit}、了解。消防と連携し、人命救助を最優先とされたい。応援隊も間もなく到着する。どうぞ。",
+                1.0,連続爆発・最大レベル,"至急至急。{unit}から{commander}、{zone}、北側フードコート付近で第二の爆発発生。被害拡大。これはテロの可能性が極めて高い。至急、全応援を。どうぞ。","need-response=true;escalate_level=4"
+                  1.0,全応援・緊急配備,"至急至急。{commander}から各局、{zone}の大型商業施設で連続爆発、本件を爆発物テロ事案に指定。レベル4。利用可能な全応援車両は現場へ急行。{unit}は二次被害に厳重注意しつつ、避難誘導及び警戒にあたられたい。全管内に緊急配備を発令する。どうぞ。","backup-all=true;need-response=true;alert=beep"
+                    1.0,現場指揮本部設置,"{backup_unit}から{commander}、現場到着。北側フードコートの被害も甚大。これより現場指揮本部を設置、{unit}は指揮下に入られたい。どうぞ。","need-response=true"
+                      1.0,現場指揮受諾,"{unit}から{backup_unit}、了解。指揮下に入る。どうぞ。",
+                        1.0,SIT・爆発物処理班派遣指示,"{commander}から{backup_unit}、指揮を了承。SITおよび爆発物処理班を急行させる。引き続き状況を報ぜられたい。どうぞ。","add_units=SIT;add_units=爆発物処理班;need-response=true"
+                          1.0,指揮本部了解,"{backup_unit}から{commander}、了解。どうぞ。",
+                            1.0,SIT現着,"SITから{commander}、現場到着。{backup_unit}と合流、警戒体制及び情報収集を開始する。どうぞ。",
+                              0.6,不審物発見・車両,"{unit}から{commander}及び現場指揮本部。避難誘導中、{zone}地下駐車場Bブロックにて、不審な{#vehicles}を発見。窓が割れ、荷台に段ボールが積まれている。どうぞ。","need-response=true"
+                                1.0,爆発物処理班急行指示・車両,"至急至急。{commander}から爆発物処理班、{zone}地下駐車場Bブロックへ急行。対象車両の処理にあたられたい。{unit}は直ちに当該エリアを完全封鎖、半径100メートル以内から人員を退避させよ。どうぞ。","need-response=true;alert=beep"
+                                  1.0,爆発物処理班処理開始,"爆発物処理班から{commander}、対象車両を確認。これより爆発物処理を開始する。どうぞ。",
+                                    1.0,容疑者情報・車両,"{backup_unit}から{commander}。目撃者情報あり。第二爆発の直前、{zone}北側ゲートから白いワンボックスで急発進する{不審な男{#num:1-2}名/黒ずくめの人物}を目撃したとの報。どうぞ。","need-response=true"
+                                      1.0,捜索指令・車両,"{commander}から各局、白いワンボックスに乗った{不審な男{#num:1-2}名/黒ずくめの人物}。逃走方向は不明。各局、厳重に警戒し、発見次第報告されたい。どうぞ。",
+                                        1.0,交通検問開始,"{units_traffic}から{commander}、了解。現場周辺の主要道路にて検問を開始する。どうぞ。",
+                                          1.0,処理完了報告・車両,"爆発物処理班から{commander}、処理完了。車両内の爆発物を無能化した。これは時限式の{高性能爆薬/簡易爆弾}と断定。どうぞ。",
+                                            1.0,現場制圧・捜査移行,"{backup_unit}から{commander}、現場指揮本部より。負傷者の搬出はほぼ完了。火勢は鎮圧状態。これより現場保全に移行する。どうぞ。",
+                                              1.0,捜査本部設置指示,"{commander}から鑑識班、{zone}連続爆発テロ事件の捜査本部を{#directions}署に設置する。至急、現場へ臨場し、鑑識活動及び捜査を開始されたい。どうぞ。","need-response=true"
+                                                1.0,捜査開始,"鑑識班から{commander}、了解。現場到着。これより捜査を開始する。どうぞ。",
+                              0.4,不審物発見・ロッカー,"{unit}から{commander}及び現場指揮本部。避難誘導中、{zone}東側出口のコインロッカーにて、異臭のする段ボールを発見。どうぞ。","need-response=true"
+                                1.0,爆発物処理班急行指示・ロッカー,"至急至急。{commander}から爆発物処理班、{zone}東側出口コインロッカーへ急行。対象物の処理にあたられたい。{unit}は直ちに当該エリアを完全封鎖、人員を退避させよ。どうぞ。","need-response=true;alert=beep"
+                                  1.0,爆発物処理班処理開始,"爆発物処理班から{commander}、対象ロッカーを確認。これより爆発物処理を開始する。どうぞ。",
+                                    1.0,容疑者情報・徒歩,"{backup_unit}から{commander}。防犯カメラ映像を確認。第二爆発の直後、{zone}東側出口から{不審な男1名/フードを被った人物}が走って立ち去る姿を確認。どうぞ。","need-response=true"
+                                      1.0,捜索指令・徒歩,"至急至急。{commander}から各局、{zone}東側出口より{不審な男1名/フードを被った人物}が徒歩で逃走。各局、周辺を厳重に警戒し、発見次第報告されたい。どうぞ。",
+                                        1.0,処理完了報告・ロッカー,"爆発物処理班から{commander}、処理完了。ロッカー内の爆発物を無能化した。これも時限式の{高性能爆薬/化学剤}と断定。どうぞ。",
+                                          1.0,現場制圧・捜査移行,"{backup_unit}から{commander}、現場指揮本部より。負傷者の搬出はほぼ完了。火勢は鎮圧状態。これより現場保全に移行する。どうぞ。",
+                                            1.0,捜査本部設置指示,"{commander}から鑑識班、{zone}連続爆発テロ事件の捜査本部を{#directions}署に設置する。至急、現場へ臨場し、鑑識活動及び捜査を開始されたい。どうぞ。","need-response=true"
+                                              1.0,捜査開始,"鑑識班から{commander}、了解。現場到着。これより捜査を開始する。どうぞ。",
+      0.3,第一報・小規模火災,"{unit}から{commander}、現場到着。{zone}、中央広場付近で小規模な火災を確認。爆発音はボンベ等の破裂音の可能性あり。負傷者数名、いずれも軽傷の模様。消防と連携し、初期消火及び避難誘導にあたる。どうぞ。","need-response=true"
+        1.0,本部了解・応援縮小,"{commander}から{unit}、了解。本件、レベル2事案とする。{backup_unit}は現場へ向かい、交通整理及び現場支援にあたられたい。どうぞ。","escalate_level=2;need-response=true"
+          1.0,現場了解,"{unit}から{commander}、了解。引き続き消防と連携し対応する。どうぞ。",
+            1.0,火勢鎮圧,"{unit}から{commander}、火勢は鎮圧。負傷者は{#num:3-5}名、いずれも軽傷。現場は落ち着きを取り戻しつつある。どうぞ。","need-response=true"
+              1.0,実況見分指示,"{commander}から{unit}、了解。火災原因について、消防と共に実況見分を開始されたい。どうぞ。",
+                1.0,見分開始,"{unit}から{commander}、了解。これより実況見分を開始する。どうぞ。",
+
+1.0,武装集団による電力施設占拠事案,,,,,type=backup;level=3
+  1.0,通報受理,"至急至急。{commander}から{unit}。{#zones}に所在する中央電力の電力施設にて、警備員より「銃声が複数回した」「{#num:5-10}名の武装集団が侵入した」との通報、本件、レベル3事案とする。至急現場へ転進し、状況を確認されたい。どうぞ。","need-response=true;alert=beep"
+    1.0,受領・転進,"{unit}から{commander}、了解。{#zones}電力施設へ転進する。どうぞ。",
+      1.0,第一報・現場到着・レベルアップ,"{unit}から{commander}、現場付近に臨場。施設正門が車両により突破されている模様。内部から断続的に銃声を確認。本件、テロ事案（レベル4）と思料される。至急、全応援及びSATの派遣を願いたい。どうぞ。","need-response=true"
+        1.0,本部応答・全応援・SAT派遣,"{commander}から各局。{#zones}電力施設における武装集団占拠事案、レベル4テロ事案に指定する。急行可能な全応援車両は現場へ急行。{unit}は二次被害に留意し、施設周辺の封鎖及び避難誘導を最優先とされたい。SAT及び爆発物処理班を急行させる。全管内に緊急配備を発令する。どうぞ。","escalate_level=4;backup-all=true;add_units=SAT;add_units=SAT・爆発物処理班;need-response=true;alert=beep"
+          1.0,応援受領,"{backup_unit}から{commander}、了解。現場へ転進する。どうぞ。",
+            1.0,現場指揮本部設置,"{unit}から{commander}、了解。これより現場指揮本部を設置、周辺道路の封鎖を開始する。施設内の人質情報は現在不明。引き続き情報収集にあたる。どうぞ。",
+              1.0,SAT現着,"SATから{commander}、SAT現場到着。{unit}と合流、これより突入計画の策定及び情報収集を開始する。どうぞ。","need-response=true"
+                1.0,本部指示・情報収集,"{commander}からSAT、了解。施設内の車両の有無、人質の人数、犯人側の要求等、情報収集を徹底されたい。どうぞ。",
+                  1.0,爆発物処理班現着,"爆発物処理班から{commander}、爆発物処理班現場到着。SATと連携し、爆発物の有無について検索を開始する。どうぞ。",
+                    0.6,人質情報発見,"{unit}から{commander}。施設警備員2名と連絡が取れない模様。人質となっている可能性大。どうぞ。","need-response=true"
+                      1.0,本部応答・交渉準備,"{commander}からSAT、了解。人質2名と想定。交渉班を至急急行させる。SATは人質救出を最優先とし、強行突入のタイミングを慎重に計られたい。どうぞ。","add_units=交渉班;need-response=true"
+                        1.0,SAT受領・監視,"SATから{commander}、了解。監視体制を強化。犯人グループは施設中央制御室に立てこもっていると思料される。どうぞ。",
+                          1.0,犯人側からの接触,"交渉班から{commander}。交渉班、現場到着。犯人側から接触あり。政府への条件提示を要求。人質は無事であるとの言動あり。どうぞ。","need-response=true"
+                            1.0,本部指示・交渉継続,"{commander}から交渉班、了解。人質の安全確保を最優先とし、交渉を継続。時間の猶予を引き延ばされたい。SATは突入準備を完了せよ。どうぞ。","need-response=true"
+                              0.5,交渉決裂・銃声,"至急至急。SATから{commander}。制御室内部より銃声{#num:1-3}発。人質に危害が加えられた可能性あり。これより強行突入する。どうぞ。","need-response=true;alert=beep"
+                                1.0,本部・突入許可,"{commander}からSAT、了解。突入を許可する。人質救出を最優先とせよ。どうぞ。",
+                                  1.0,突入・制圧報告,"SATから{commander}。突入、制圧完了。武装集団{#num:5-7}名を確保。人質{#num:1-2}名、{負傷/無事}にて保護。制御室内に爆発物らしき物を発見。爆発物処理班の確認を願いたい。どうぞ。","need-response=true"
+                                    1.0,爆発物処理班処理指示,"{commander}から爆発物処理班、制御室へ急行。不審物の処理にあたられたい。SATは確保したマル被の身柄を{#directions}署へ移送せよ。どうぞ。","need-response=true"
+                                      1.0,爆発物処理班処理開始,"爆発物処理班から{commander}、了解。対象物を確認。これより処理を開始する。どうぞ。",
+                                        1.0,爆発物処理班処理完了,"爆発物処理班から{commander}、処理完了。対象物は{時限式爆弾/高性能爆薬}と判明。無能化した。どうぞ。","need-response=true"
+                                          1.0,鑑識活動,鑑識班から{commander}、現場臨場。鑑識活動を開始する。どうぞ。,
+                                              1.0,状況終了,{commander}から各局、本件ハイジャック事案、状況終了。甲号体制を解き、通常業務に復帰されたい。以上、{commander}。,
+                              0.5,交渉・投降受諾,"交渉班から{commander}。交渉の結果、犯人グループが投降に応じる模様。人質を先に解放するとの言動あり。どうぞ。","need-response=true"
+                                1.0,本部指示・確保準備,"{commander}からSAT、了解。SATは人質解放後、直ちにマル被の身柄確保にあたられたい。投降が偽装である可能性も留意せよ。どうぞ。","need-response=true"
+                                  1.0,人質保護・身柄確保,"SATから{commander}、了解。人質{#num:1-2}名を無事保護。続いて武装集団{#num:5-7}名の身柄を確保した。どうぞ。","need-response=true"
+                                    1.0,本部指示・捜索,"{commander}から爆発物処理班、了解。爆発物処理班は直ちに施設内の爆発物検索を開始されたい。SATはマル被を{#directions}署へ移送せよ。どうぞ。","need-response=true"
+                                      1.0,爆発物処理班捜索開始,"爆発物処理班から{commander}、了解。これより検索を開始する。どうぞ。",
+                                        1.0,不審物発見/発見至らず,"爆発物処理班から{commander}、検索結果。{制御室にて爆発物を発見、処理完了/施設内、爆発物発見に至らず}。どうぞ。","need-response=true"
+                                            1.0,鑑識活動,鑑識班から{commander}、現場臨場。鑑識活動を開始する。どうぞ。,
+                                              1.0,状況終了,{commander}から各局、本件占拠事案、状況終了。甲号体制を解き、通常業務に復帰されたい。以上、{commander}。,
+                    0.4,人質不在確認,"{unit}から{commander}。施設警備員は全員施設外へ避難済みと判明。人質はいない模様。犯人グループは施設中枢部に立てこもり、破壊活動を行っている可能性あり。どうぞ。","need-response=true"
+                      1.0,本部指示・突入準備,"{commander}からSAT、了解。人質不在を確認。SATは施設の早期奪還を目的とし、強行突入の準備を急がれたい。爆発物処理班は施設外周の爆発物検索を継続。どうぞ。","need-response=true"
+                        1.0,SAT準備完了,"SATから{commander}、了解。突入準備完了。目標は中央制御室。どうぞ。",
+                          1.0,爆発物処理班外周報告,"至急至急。爆発物処理班から{commander}、外周検索中、施設北側フェンスにて爆発物を発見。仕掛け爆弾（ブービートラップ）の可能性あり。処理を開始する。どうぞ。","need-response=true;alert=beep"
+                            1.0,本部指示・突入待機,"{commander}からSAT、了解。SATは爆発物処理班の処理完了まで突入を待機。二次被害の防止を徹底されたい。どうぞ。","need-response=true"
+                              1.0,爆発物処理班処理完了,"爆発物処理班から{commander}、処理完了。対象物を無能化した。どうぞ。","need-response=true"
+                                1.0,本部・突入許可,"{commander}からSAT、了解。SATはこれより突入を開始されたい。どうぞ。","need-response=true"
+                                  1.0,突入・制圧報告,"SATから{commander}、突入。中央制御室を制圧。武装集団{#num:5-7}名を確保した。施設内の爆発物を発見。どうぞ。","need-response=true"
+                                    1.0,本部指示・処理,"{commander}から爆発物処理班、了解。爆発物処理班は制御室へ急行、不審物の処理にあたられたい。SATはマル被を{#directions}署へ移送せよ。どうぞ。","need-response=true"
+                                      1.0,爆発物処理班処理開始,"爆発物処理班から{commander}、了解。対象物を確認。これより処理を開始する。どうぞ。",
+                                        1.0,爆発物処理班処理完了,"爆発物処理班から{commander}、処理完了。対象物は{高性能爆薬/電力破壊装置}と判明。無能化した。どうぞ。","need-response=true"
+                                          1.0,鑑識活動,鑑識班から{commander}、現場臨場。鑑識活動を開始する。どうぞ。,
+                                                1.0,状況終了,{commander}から各局、本件占拠事案、状況終了。甲号体制を解き、通常業務に復帰されたい。以上、{commander}。,
+
+1.0,大規模異臭・傷病者事案,,,,,type=backup;level=3
+  1.0,通報受理,"至急至急。{commander}から{unit}。{zone}のショッピングモールにて、「異臭がする」「複数の人間が倒れている」との110番通報多数入電中。事案はレベル3と認定。至急現場へ転進し、状況を確認されたい。どうぞ。","need-response=true;alert=beep"
+    1.0,受領・転進,"{unit}から{commander}、了解。{zone}へ転進する。どうぞ。",
+      1.0,第一報・現着,"{unit}から{commander}、現着。{zone}、モール正面入口付近に多数の傷病者が倒れている模様。意識不明、呼吸困難を訴える者多数。強烈な刺激臭あり。どうぞ。","need-response=true"
+        1.0,本部指示・二次被害防止,"{commander}から{unit}、了解。化学物質によるテロの可能性を視野。不用意に内部進入することなく、風上からの状況把握、及び避難誘導、救護活動を最優先とせよ。消防・救急へ緊急手配済み。どうぞ。","need-response=true"
+          1.0,現場対応,"{unit}から{commander}、了解。風上へ退避し、救護活動を開始。ただし、内部から助けを求める声が聞こえる。どうぞ。",
+            0.4,分岐A: PM突入・被災,"{unit}から{commander}。内部の状況確認のため、PM数名が進入。どうぞ。","need-response=true"
+              1.0,本部確認,"{commander}から{unit}。受傷事故防止に特段の留意をされたい。状況を逐一報告せよ。どうぞ。","need-response=true"
+                1.0,事態急変・レベル4移行要請,"至急至急。{unit}から{commander}、内部突入したPM{#num:2-3}名が呼吸困難を訴えながら脱出。本事案、化学テロ、神経ガスと思料される。直ちにレベル4への移行、NBC部隊の派遣を願う。どうぞ。","need-response=true"
+                  1.0,レベル4移行・NBC派遣,"至急至急。{commander}から各局、本件、レベル4事案に移行。{zone}における化学テロ事案と断定する。NBC部隊、SIT（特殊捜査班）、爆発物処理班を急行させる。{unit}は直ちに後退、風上にて封鎖線を確立せよ。どうぞ。","escalate_level=4;add_units=NBC;add_units=SIT;add_units=爆発物処理班;need-response=true;alert=beep"
+                    1.0,現場後退,"{unit}から{commander}、了解。直ちに後退、封鎖線を設定する。内部PMの救出を急ぎ願いたい。どうぞ。",
+                      1.0,NBC受領,"NBC部隊から{commander}、了解。現場へ転進する。どうぞ。",
+                        1.0,SIT受領,"SITから{commander}、了解。現場へ転進する。どうぞ。",
+                          1.0,配備発令,"{commander}から各局。{zone}を中心とする6キロ圏配備を発令する。実施署は{#directions}署、{#directions}署、{#directions}署。甲号体制とする。どうぞ。",
+                            1.0,NBC現着・突入,"NBC部隊から{commander}、現場到着。レベルA防護服に着装完了。これより内部突入、PM及び要救助者の救出を開始する。どうぞ。","need-response=true"
+                              1.0,本部了解,"{commander}からNBC部隊、了解。ガス検知の結果を速やかに一報されたい。どうぞ。",
+                                1.0,内部状況・ガス検知,"NBC部隊から{commander}。内部突入。入口付近にPM{#num:2-3}名、いずれも心肺停止状態で発見。直ちに除染エリアへ搬送する。ガス検知器作動、シアン系ガス系の神経ガスと断定。どうぞ。","need-response=true"
+                                  1.0,本部指示・捜査,"{commander}からSIT、神経ガスと断定。SITは現場周辺の防犯カメラ解析、及びマル目 の検索を開始されたい。どうぞ。","need-response=true"
+                                    1.0,SIT捜査開始,"SITから{commander}、了解。捜査を開始する。どうぞ。",
+                                      1.0,不審物発見,"至急至急。{unit}から{commander}。モール西側通用口付近にて、不審な段ボールを発見。周囲に液体が漏れ、異臭の発生源と思料される。どうぞ。","alert=beep;need-response=true"
+                                        1.0,爆発物処理班・NBC派遣指示,"{commander}から爆発物処理班、NBC部隊。西側通用口へ急行。当該段ボールの処理にあたられたい。爆発の危険性も考慮せよ。どうぞ。","need-response=true"
+                                          1.0,処理開始,"爆発物処理班から{commander}、NBCと合流。対象物を確認。これより処理を開始する。どうぞ。",
+                                            1.0,マル目情報,"SITから{commander}。マル目情報あり。事案発生の{#num:5-10}分前、西側通用口に{#vehicles}が停車、{不審な男{#num:1-2}名/黒ずくめの人物}が段ボールの物を設置し、急発進したとの言動あり。どうぞ。","need-response=true"
+                                              1.0,緊急手配,"{commander}から各局、緊急手配。{#vehicles}、特徴{不審な男{#num:1-2}名/黒ずくめの人物}。発見次第、応援を要請し、慎重に確保されたい。対象は神経ガスを所持の可能性あり。どうぞ。",
+                                                0.6,車両発見,"{units_traffic}から{commander}、緊急手配の{#vehicles}を{#zones}にて発見。現在、{#zones}方面へ逃走中。追跡を開始する。どうぞ。","need-response=true"
+                                                  1.0,追跡指示,"{commander}から{units_traffic}、了解。対象は化学テロ容疑車両である。強行な確保は避け、応援到着を待て。SIT機動班を{#zones}へ転進させる。どうぞ。","add_units=SIT;need-response=true"
+                                                    1.0,応援受領,"{units_traffic}から{commander}、了解。対象を見失わないよう追跡を継続する。どうぞ。",
+                                                      1.0,SIT機動班転進,"SITから{commander}、機動班、{#zones}へ転進中。どうぞ。",
+                                                        1.0,車両停止,"{units_traffic}から{commander}、対象車両、{#zones}の路上で停止。乗員{不審な男{#num:1-2}名/黒ずくめの人物}が降車、抵抗の構え。どうぞ。","need-response=true"
+                                                          1.0,確保指示,"{commander}から{units_traffic}及びSIT機動班、直ちに確保せよ。対象は神経ガス所持の可能性あり、防護に留意。どうぞ。","need-response=true"
+                                                            1.0,確保,"SITから{commander}、{units_traffic}と共同し、マル被{#num:1-2}名を確保。抵抗あり、PM1名が軽傷。マル被の所持品を検査中。どうぞ。","need-response=true"
+                                                              1.0,本部了解・現場,"{commander}からSIT、確保了解。{#directions}署へ連行されたい。{commander}から爆発物処理班、現場の処理状況一報されたい。どうぞ。","need-response=true"
+                                                                1.0,処理完了(A-1),"爆発物処理班から{commander}、処理完了。ガスの発生源は当該段ボールと断定。内部に時限装置はなし。どうぞ。",
+                                                                  1.0,現場制圧(A-1),"NBC部隊から{commander}、内部の救助活動完了。ガス濃度、安全基準値まで低下。これより現場除染作業に移行する。どうぞ。",
+                                                                    1.0,捜査本部設置(A-1),"{commander}から{#directions}署、及び専務。本件、{#directions}署に捜査本部を設置する。専務は直ちに現場臨場 し、NBCと連携の上、証拠保全及び鑑識活動を開始されたい。どうぞ。","need-response=true"
+                                                                      1.0,捜査開始(A-1),"専務から{commander}、了解。現場到着。これより鑑識活動を開始する。どうぞ。",
+                                                  1.0,車両見失う,"{units_traffic}から{commander}、{#zones}にて追跡中の車両、見失った。最終逃走方向は{#zones}方面。どうぞ。","need-response=true"
+                                                    1.0,本部指示・包囲網,"{commander}から各局、了解。{#zones}方面の検問を強化。引き続き捜索されたい。{commander}から爆発物処理班、現場の処理状況はどうか。どうぞ。","need-response=true"
+                                                      1.0,処理完了(A-2),"爆発物処理班から{commander}、処理完了。ガスの発生源は当該段ボールと断定。内部に時限装置はなし。どうぞ。",
+                                                        1.0,現場制圧(A-2),"NBC部隊から{commander}、内部の救助活動完了。ガス濃度、安全基準値まで低下。これより現場除染作業に移行する。どうぞ。",
+                                                          1.0,捜査本部設置(A-2),"{commander}から{#directions}署、及び専務。本件、{#directions}署に捜査本部を設置する。専務は直ちに現場臨場 し、NBCと連携の上、証拠保全及び鑑識活動を開始されたい。どうぞ。","need-response=true"
+                                                            1.0,捜査開始(A-2),"専務から{commander}、了解。現場到着。これより鑑識活動を開始する。どうぞ。",
+            0.3,分岐B: 突入断念・レベル4移行,"{unit}から{commander}。異臭強烈。PMの防毒マスク では対応不能と判断。突入は危険。直ちにレベル4への移行、及びNBC部隊の派遣を具申する。どうぞ。","need-response=true"
+              1.0,本部判断・レベル4移行,"{commander}から{unit}、判断了承。二次被害防止の措置を図られたい。具申を受け、本件レベル4事案に移行。{zone}における化学テロ事案と断定する。どうぞ。","escalate_level=4;need-response=true"
+                1.0,現場封鎖,"{unit}から{commander}、了解。直ちに封鎖線を拡大、風下住民の避難誘導を開始する。どうぞ。",;need-response=true
+                  1.0,NBC・SIT・爆発物処理班派遣,"{commander}から各局。NBC部隊、SIT（特殊捜査班）、爆発物処理班を急行させる。全応援は{unit}の指揮下に入り、封鎖線の確立にあたられたい。どうぞ。","add_units=NBC;add_units=SIT;add_units=爆発物処理班;need-response=true"
+                    1.0,NBC受領,"NBC部隊から{commander}、了解。現場へ転進する。どうぞ。",need-response=true
+                      1.0,SIT受領,"SITから{commander}、了解。現場へ転進する。どうぞ。",
+                        1.0,配備発令,"{commander}から各局。{zone}を中心とする6キロ圏配備を発令する。実施署は{#directions}署、{#directions}署、{#directions}署。甲号体制とする。どうぞ。",alert=beep
+                          1.0,NBC現着・突入,"NBC部隊から{commander}、現場到着。レベルA防護服に着装完了。これより内部突入、状況確認及びガス検知を開始する。どうぞ。","need-response=true"
+                            1.0,本部了解,"{commander}からNBC部隊、了解。内部の状況、速やかに一報されたい。どうぞ。",
+                              1.0,内部状況・ガス検知,"NBC部隊から{commander}。内部突入。モール1階フードコートを中心に、要救助者約{#num:20-30}名が心肺停止状態で倒れている。ガス検知器作動、シアン系ガス系の神経ガスと断定。どうぞ。","need-response=true"
+                                1.0,本部指示・捜査,"{commander}からSIT、神経ガスと断定。SITは現場周辺の防犯カメラ解析、及びマル目 の検索を開始されたい。どうぞ。","need-response=true"
+                                  1.0,SIT捜査開始,"SITから{commander}、了解。捜査を開始する。どうぞ。",
+                                    1.0,不審物発見・爆発物処理班処理,"NBC部隊から{commander}。フードコートにて、ガスの発生源と思料される 段ボールを発見。爆発物処理班と連携し、これより処理する。どうぞ。","need-response=true"
+                                      1.0,本部了解,"{commander}からNBC部隊、爆発物処理班。処理を許可する。爆発の危険性にも留意されたい。どうぞ。",
+                                        1.0,マル目情報,"SITから{commander}。マル目情報あり。事案発生の{#num:10-15}分前、フードコートに{#vehicles}で乗り付けた{不審な男{#num:1-2}名/黒ずくめの人物}が段ボールの物を放置し、立ち去ったとの言動あり。どうぞ。","need-response=true"
+                                          1.0,緊急手配,"{commander}から各局、緊急手配。{#vehicles}、特徴{不審な男{#num:1-2}名/黒ずくめの人物}。発見次第、応援を要請し、慎重に確保されたい。対象は神経ガスを所持の可能性あり。どうぞ。",
+                                              0.6,車両発見,"{units_traffic}から{commander}、緊急手配の{#vehicles}を{#zones}にて発見。現在、{#zones}方面へ逃走中。追跡を開始する。どうぞ。","need-response=true"
+                                                1.0,追跡指示,"{commander}から{units_traffic}、了解。対象は化学テロ容疑車両である。強行な確保は避け、応援到着を待て。SIT機動班を{#zones}へ転進させる。どうぞ。","add_units=SIT;need-response=true"
+                                                  1.0,応援受領,"{units_traffic}から{commander}、了解。対象を見失わないよう追跡を継続する。どうぞ。",
+                                                    1.0,SIT機動班転進,"SITから{commander}、機動班、{#zones}へ転進中。どうぞ。",
+                                                      1.0,車両停止,"{units_traffic}から{commander}、対象車両、{#zones}の路上で停止。乗員{不審な男{#num:1-2}名/黒ずくめの人物}が降車、抵抗の構え。どうぞ。","need-response=true"
+                                                        1.0,確保指示,"{commander}から{units_traffic}及びSIT機動班、直ちに確保せよ。対象は神経ガス所持の可能性あり、防護に留意。どうぞ。","need-response=true"
+                                                          1.0,確保,"SITから{commander}、{units_traffic}と共同し、マル被{#num:1-2}名を確保。抵抗あり、PM1名が軽傷。マル被の所持品を検査中。どうぞ。","need-response=true"
+                                                            1.0,本部了解・現場,"{commander}からSIT、確保了解。{#directions}署へ連行されたい。{commander}から爆発物処理班、現場の処理状況一報されたい。どうぞ。","need-response=true"
+                                                              1.0,処理完了(B-1),"爆発物処理班から{commander}、処理完了。ガスの発生源は当該段ボールと断定。内部に時限装置はなし。どうぞ。",
+                                                                1.0,現場制圧(B-1),"NBC部隊から{commander}、内部の救助活動完了。ガス濃度、安全基準値まで低下。これより現場除染作業に移行する。どうぞ。",
+                                                                  1.0,捜査本部設置(B-1),"{commander}から{#directions}署、及び専務。本件、{#directions}署に捜査本部を設置する。専務は直ちに現場臨場 し、NBCと連携の上、証拠保全及び鑑識活動を開始されたい。どうぞ。","need-response=true"
+                                                                    1.0,捜査開始(B-1),"専務から{commander}、了解。現場到着。これより鑑識活動を開始する。どうぞ。",
+                                              0.4,車両見失う,"{units_traffic}から{commander}、{#zones}にて追跡中の車両、見失った。最終逃走方向は{#zones}方面。どうぞ。","need-response=true"
+                                                1.0,本部指示・包囲網,"{commander}から各局、了解。{#zones}方面の検問を強化。引き続き捜索されたい。{commander}から爆発物処理班、現場の処理状況はどうか。どうぞ。","need-response=true"
+                                                  1.0,処理完了(B-2),"爆発物処理班から{commander}、処理完了。ガスの発生源は当該段ボールと断定。内部に時限装置はなし。どうぞ。",
+                                                    1.0,現場制圧(B-2),"NBC部隊から{commander}、内部の救助活動完了。ガス濃度、安全基準値まで低下。これより現場除染作業に移行する。どうぞ。",
+                                                      1.0,捜査本部設置(B-2),"{commander}から{#directions}署、及び専務。本件、{#directions}署に捜査本部を設置する。専務は直ちに現場臨場 し、NBCと連携の上、証拠保全及び鑑識活動を開始されたい。どうぞ。","need-response=true"
+                                                        1.0,捜査開始(B-2),"専務から{commander}、了解。現場到着。これより鑑識活動を開始する。どうぞ。",
+            0.3,応援到着,"{backup_unit}から{commander}、現場到着。{unit}と合流、指示を願いたい。どうぞ。","need-response=true"
+                1.0,本部指示・範囲拡大,"{commander}から{backup_unit}、{unit}は正面入口の対応中。{backup_unit}はモール地下駐車場、及び搬入口方面の状況確認にあたられたい。二次被害に留意せよ。どうぞ。","need-response=true"
+                  1.0,応援受領,"{backup_unit}から{commander}、了解。地下駐車場へ向かう。どうぞ。",
+                    1.0,地下駐車場で異常発見,"至急至急。{backup_unit}から{commander}、地下駐車場 {#num:1-3} 階、{#vehicles}の周囲に複数の傷病者が倒れている。同車両から白煙が噴出している模様。どうぞ。","need-response=true;alert=beep"
+                      1.0,レベル4移行・NBC派遣,"至急至急。{commander}から各局、本件、レベル4事案に移行。{zone}における化学テロ事案と断定する。NBC、SIT、爆発物処理班を急行させる。{unit}及び{backup_unit}は直ちに後退、風上にて封鎖線を確立せよ。どうぞ。","escalate_level=4;add_units=NBC;add_units=SIT;add_units=爆発物処理班;need-response=true;alert=beep"
+                        1.0,現場後退,"{unit}から{commander}、了解。正面入口の封鎖線を後退させる。どうぞ。",
+                          1.0,現場後退2,"{backup_unit}から{commander}、了解。地下駐車場を封鎖、避難誘導中。どうぞ。",
+                            1.0,NBC受領,"NBC部隊から{commander}、了解。現場へ転進する。どうぞ。",
+                              1.0,SIT受領,"SITから{commander}、了解。現場へ転進する。どうぞ。",
+                                1.0,配備発令,"{commander}から各局。{zone}を中心とする6キロ圏配備を発令する。実施署は{#directions}署、{#directions}署、{#directions}署。甲号体制とする。どうぞ。",
+                                  1.0,NBC現着・突入(地下),"NBC部隊から{commander}、現場到着。レベルA防護服に着装完了。これより地下駐車場へ突入、対象車両の確認を開始する。どうぞ。","need-response=true"
+                                    1.0,本部了解,"{commander}からNBC部隊、了解。ガス検知の結果を速やかに一報されたい。どうぞ。",
+                                      1.0,内部状況・ガス検知(地下),"NBC部隊から{commander}。地下駐車場突入。対象の{#vehicles}よりシアン系ガス系神経ガスを検知。車両は密閉されており、内部に装置があると思料される。どうぞ。","need-response=true"
+                                        1.0,本部指示・捜査,"{commander}からSIT、神経ガスと断定。SITは現場周辺の防犯カメラ解析、及びマル目 の検索を開始されたい。どうぞ。","need-response=true"
+                                          1.0,SIT捜査開始,"SITから{commander}、了解。捜査を開始する。どうぞ。",
+                                            1.0,爆発物処理班・NBC処理指示,"{commander}から爆発物処理班、NBC部隊。当該{#vehicles}の処理にあたられたい。爆発物と連動の可能性あり、特段の留意をされたい。どうぞ。","need-response=true"
+                                              1.0,処理開始,"爆発物処理班から{commander}、NBCと合流。対象車両の確認中。これより処理を開始する。どうぞ。",
+                                                1.0,マル目情報,"SITから{commander}。マル目情報あり。事案発生の{#num:15-20}分前、{不審な男{#num:1-2}名/黒ずくめの人物}が当該{#vehicles}を地下駐車場に放置し、別の{#vehicles}に乗り換え逃走したとの言動あり。どうぞ。","need-response=true"
+                                                  1.0,緊急手配,"{commander}から各局、緊急手配。逃走車両{#vehicles}、特徴{不審な男{#num:1-2}名/黒ずくめの人物}。発見次第、応援を要請し、慎重に確保されたい。対象は神経ガスを所持の可能性あり。どうぞ。",
+                                                    0.6,分岐C-1: 車両発見・追跡
+                                                      1.0,車両発見,"{units_traffic}から{commander}、緊急手配の{#vehicles}を{#zones}にて発見。現在、{#zones}方面へ逃走中。追跡を開始する。どうぞ。","need-response=true"
+                                                        1.0,追跡指示,"{commander}から{units_traffic}、了解。対象は化学テロ容疑車両である。強行な確保は避け、応援到着を待て。SIT機動班を{#zones}へ転進させる。どうぞ。","add_units=SIT;need-response=true"
+                                                          1.0,応援受領,"{units_traffic}から{commander}、了解。対象を見失わないよう追跡を継続する。どうぞ。",
+                                                            1.0,SIT機動班転進,"SITから{commander}、機動班、{#zones}へ転進中。どうぞ。",
+                                                              1.0,車両停止,"{units_traffic}から{commander}、対象車両、{#zones}の路上で停止。乗員{不審な男{#num:1-2}名/黒ずくめの人物}が降車、抵抗の構え。どうぞ。","need-response=true"
+                                                                1.0,確保指示,"{commander}から{units_traffic}及びSIT機動班、直ちに確保せよ。対象は神経ガス所持の可能性あり、防護に留意。どうぞ。","need-response=true"
+                                                                  1.0,確保,"SITから{commander}、{units_traffic}と共同し、マル被{#num:1-2}名を確保。抵抗あり、PM1名が軽傷。マル被の所持品を検査中。どうぞ。","need-response=true"
+                                                                    1.0,本部了解・現場,"{commander}からSIT、確保了解。{#directions}署へ連行されたい。{commander}から爆発物処理班、現場の処理状況一報されたい。どうぞ。","need-response=true"
+                                                                      1.0,処理完了(C-1),"爆発物処理班から{commander}、処理完了。車両内のガス発生装置を無能化。爆発物の連動はなし。どうぞ。",
+                                                                        1.0,現場制圧(C-1),"NBC部隊から{commander}、内部の救助活動完了。ガス濃度、安全基準値まで低下。これより現場除染作業に移行する。どうぞ。",
+                                                                          1.0,捜査本部設置(C-1),"{commander}から{#directions}署、及び専務。本件、{#directions}署に捜査本部を設置する。専務は直ちに現場臨場 し、NBCと連携の上、証拠保全及び鑑識活動を開始されたい。どうぞ。","need-response=true"
+                                                                            1.0,捜査開始(C-1),"専務から{commander}、了解。現場到着。これより鑑識活動を開始する。どうぞ。",
+                                                    0.4,分岐C-2: 車両見失う
+                                                      1.0,車両見失う,"{units_traffic}から{commander}、{#zones}にて追跡中の車両、見失った。最終逃走方向は{#zones}方面。どうぞ。","need-response=true"
+                                                        1.0,本部指示・包囲網,"{commander}から各局、了解。{#zones}方面の検問を強化。引き続き捜索されたい。{commander}から爆発物処理班、現場の処理状況はどうか。どうぞ。","need-response=true"
+                                                          1.0,処理完了(C-2),"爆発物処理班から{commander}、処理完了。車両内のガス発生装置を無能化。爆発物の連動はなし。どうぞ。",
+                                                            1.0,現場制圧(C-2),"NBC部隊から{commander}、内部の救助活動完了。ガス濃度、安全基準値まで低下。これより現場除染作業に移行する。どうぞ。",
+                                                              1.0,捜査本部設置(C-2),"{commander}から{#directions}署、及び専務。本件、{#directions}署に捜査本部を設置する。専務は直ちに現場臨場 し、NBCと連携の上、証拠保全及び鑑識活動を開始されたい。どうぞ。","need-response=true"
+                                                                1.0,捜査開始(C-2),"専務から{commander}、了解。現場到着。これより鑑識活動を開始する。どうぞ。",
