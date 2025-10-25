@@ -1446,6 +1446,14 @@ progressCase(caseId, busyUnits) {
 
   console.log('  🚨 isBackupAllCallNow:', isBackupAllCallNow);
   if (isBackupAllCallNow) {
+    
+    // ▼▼▼【バグ修正】既存のBackup-Allがアクティブな場合の上書き防止 ▼▼▼
+    if (this.isBackupAllActive && this.backupAllCaseId !== caseId) {
+        console.log(`  ⏸ 既存のbackup-all (${this.backupAllCaseId}) が発令中のため、新規のbackup-all (${caseId}) 宣言を待機します。`);
+        return null; // ★ 待機
+    }
+    // ▲▲▲【バグ修正】ここまで ▲▲▲
+
     console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
     console.log('  🔴 backup-all発令！');
     console.log('  ━━━━━━━━━━━━━━━━━━━━━━');
@@ -1580,7 +1588,6 @@ progressCase(caseId, busyUnits) {
     params: nextNode.params
   };
 }
-
   getAllActiveCases() {
     return Array.from(this.activeCases.values()).filter(c => c.phase !== 'clear');
   }
