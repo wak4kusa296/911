@@ -2351,50 +2351,59 @@ function loadVoices() {
 loadVoices();
 
 async function speakMessage(text, isTest = false) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    // 少し待ってから処理（元の構造維持）
     setTimeout(() => {
       if (!('speechSynthesis' in window)) {
         resolve();
         return;
       }
 
-      // === 最新UI値で毎回上書きする ===
+      // 1. UIの現在値で毎回最新状態を確定させる
       // rate
       const rateSliderEl = document.getElementById("rateSlider");
       if (rateSliderEl) {
-        ttsRate = parseFloat(rateSliderEl.value) || ttsRate;
+        const r = parseFloat(rateSliderEl.value);
+        if (!isNaN(r)) ttsRate = r;
       }
 
-      // volume
-      const ttsVolEl = document.getElementById("ttsVolumeSlider");
-      if (ttsVolEl) {
-        ttsVolume = parseFloat(ttsVolEl.value) || ttsVolume;
+      // TTSボリューム
+      const ttsVolumeSliderEl = document.getElementById("ttsVolumeSlider");
+      if (ttsVolumeSliderEl) {
+        const tv = parseFloat(ttsVolumeSliderEl.value);
+        if (!isNaN(tv)) ttsVolume = tv;
       }
 
-      // master volume (ミキサー側)
-      const masterVolSliderEl = document.getElementById("masterVolumeSlider");
-      let masterVol;
-      if (masterGain && masterGain.gain) {
+      // masterVolume
+      let masterVol = 1.0;
+      if (typeof masterGain !== "undefined" && masterGain) {
         masterVol = masterGain.gain.value;
-      } else if (masterVolSliderEl) {
-        masterVol = parseFloat(masterVolSliderEl.value) || 1.0;
       } else {
-        masterVol = 1.0;
+        const mvEl = document.getElementById("masterVolumeSlider");
+        if (mvEl) {
+          const mv = parseFloat(mvEl.value);
+          if (!isNaN(mv)) masterVol = mv;
+        }
       }
 
-      // voiceセレクト側の変更を反映
-      const voiceSelEl = document.getElementById("voiceSel");
-      if (voiceSelEl && speechSynthesis.getVoices) {
+      // voice選択（ここがiOSの外国語読み対策）
+      const voiceSelectEl = document.getElementById("voiceSel");
+      if (voiceSelectEl) {
         const allVoices = speechSynthesis.getVoices();
-        const selIndex = parseInt(voiceSelEl.value);
-        if (!isNaN(selIndex)) {
-          // voiceSel は日本語のみなど絞り込みUIの場合があるので注意:
-          // ここでは「選ばれてる番号に対応する声を安全に拾えたら chosenVoice を更新」
-          if (allVoices[selIndex]) {
-            chosenVoice = allVoices[selIndex];
-          }
+        const idx = parseInt(voiceSelectEl.value);
+
+        if (!isNaN(idx) && allVoices[idx]) {
+          chosenVoice = allVoices[idx];
+        } else {
+          chosenVoice =
+            chosenVoice ||
+            allVoices.find(v => /^ja/i.test(v.lang)) ||
+            allVoices[0] ||
+            null;
         }
-        // さらに保険: もし chosenVoice が無効なら再補正
+      } else {
+        // voiceSelそのものがない場合のフォールバック
+        const allVoices = speechSynthesis.getVoices();
         if (!chosenVoice && allVoices.length > 0) {
           chosenVoice =
             allVoices.find(v => /^ja/i.test(v.lang)) ||
@@ -2403,40 +2412,37 @@ async function speakMessage(text, isTest = false) {
         }
       }
 
-      // ここまでで chosenVoice / ttsRate / ttsVolume / masterVol を
-      // その瞬間のUIに同期できた
-
-      // === ここから実際にUtteranceを作る ===
+      // 2. 発話オブジェクト作成
       const utter = new SpeechSynthesisUtterance(text);
 
-      // voiceが無効だとiOSは勝手にデフォルトに戻すので
-      // (それ自体は許す) けど一応代入はする
-      if (chosenVoice) {
-        utter.voice = chosenVoice;
-      } else {
-        utter.voice = null; // iOSならシステムの既定音声で読む
-      }
+      // iOSはvoiceが不正参照だと無視されて英語固定になったりする。
+      // 常に「いまの chosenVoice か null」に限定する。
+      utter.voice = chosenVoice || null;
 
       utter.rate = ttsRate;
       utter.volume = ttsVolume * masterVol;
 
-      utter.onend = resolve;
-      utter.onerror = (e) => {
-        if (e.error === 'interrupted') {
-          resolve();
-        } else {
-          console.error("SpeechSynthesisUtterance.onerror", e);
-          reject(e);
-        }
+      // 3. コールバック
+      utter.onend = () => {
+        resolve();
       };
 
+      utter.onerror = (e) => {
+        // iOS Safari はユーザーの割り込み/キャンセルでも onerror に来る。
+        // その場合は rejectしたくない（シナリオ止めたくない）ので resolve 扱いにする。
+        console.warn("SpeechSynthesisUtterance.onerror (treated as resolve)", e);
+        resolve();
+      };
+
+      // 4. Safari安定化のために僅かな遅延を入れて speak()
       setTimeout(() => {
+        // 再生を開始
         speechSynthesis.speak(utter);
       }, 50);
+
     }, 50);
   });
 }
-
 
 /// ==========================================
 // メインループ
@@ -2767,6 +2773,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   ttsSlider.addEventListener('change', () => {
     // いきなり喋らせず、最後の操作から少し落ち着いたら1回だけ喋る
     if (ttsTestTimer) {
+      clearTimeout(ttsTestTimer);
       clearTimeout(ttsTestTimer);
     }
     ttsTestTimer = setTimeout(async () => {
