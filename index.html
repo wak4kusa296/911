@@ -864,8 +864,37 @@ async function initTTS() {
   }
   
   // 2. <select>（ドロップダウン）を構築
-  const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
-  const listForSelect = jaVoices.length > 0 ? jaVoices : voices;
+
+  // ▼▼▼【修正】Siriを優先的に含め、Eloquenceを除外する ▼▼▼
+  
+  // 2a. ボイスの分類 (Siri, 他の日本語, Eloquence)
+  // Web Speech APIが返すボイス名はOSによって異なる
+  
+  // 2a-1. "Siri" の文字列を含む日本語ボイスを最優先
+  const siriVoices = voices.filter(v => 
+      v.name.toLowerCase().includes('siri') && /^ja/i.test(v.lang)
+  );
+
+  // 2a-2. "Siri" と "Eloquence" を除く、他の日本語ボイス
+  const otherJaVoices = voices.filter(v =>
+      /^ja/i.test(v.lang) && 
+      !v.name.toLowerCase().includes('siri') &&
+      !v.name.toLowerCase().includes('eloquence') // Eloquenceを除外
+  );
+  
+  // 2b. リストの決定 (Siri > 他の日本語)
+  const jaVoices = [...siriVoices, ...otherJaVoices];
+  
+  let listForSelect;
+  if (jaVoices.length > 0) {
+      // 日本語ボイスが1件でもあれば、それをリストとする
+      listForSelect = jaVoices;
+  } else {
+      // 日本語ボイスがなければ、全言語からEloquenceを除外したリスト
+      listForSelect = voices.filter(v => !v.name.toLowerCase().includes('eloquence'));
+  }
+  // ▲▲▲【修正】ここまで ▲▲▲
+
 
   // HTMLにある <option value=""> はクリアして再構築
   voiceSelect.innerHTML = '<option value="">音声自動選択</option>';
@@ -2465,17 +2494,16 @@ async function speakMessage(text) { // 'isTest' パラメータを削除
     // ★ 危険なネストした setTimeout を削除 ★
     // initTTS で一度アンロックされていれば、これは動作するはず
     // わずかな遅延は、メインスレッドをブロックしないために残す
-    setTimeout(() => {
-        try {
-            // ★★★ iOSの安全策として、speakの直前にcancelを入れる ★★★
-            // (設定スライダーがこれで成功していたため)
-            speechSynthesis.cancel(); 
-            speechSynthesis.speak(utter);
-        } catch (e) {
-            console.error("[TTS] speech.speak() failed:", e);
-            resolve(); // エラーが起きてもPromiseチェーンを止めない
-        }
-    }, 10); // 100ms -> 10ms に短縮
+    try {
+        // ★★★ iOSの安全策として、speakの直前にcancelを入れる ★★★
+        // (設定スライダーがこれで成功していたため)
+        speechSynthesis.cancel(); 
+        speechSynthesis.speak(utter);
+    } catch (e) {
+        console.error("[TTS] speech.speak() failed:", e);
+        resolve(); // エラーが起きてもPromiseチェーンを止めない
+    }
+    // ★ setTimeout(() => { ... }, 10); を削除
   });
 }
 // ▲▲▲【変更】speakMessageの修正ここまで ▲▲▲
