@@ -929,7 +929,7 @@ async function initTTS() {
   initializedTTSForApple = true;
 }
 
-async function toggleTTS() {
+function toggleTTS() {
   const wasEnabled = TTS_ENABLED;
   TTS_ENABLED = !TTS_ENABLED;
 
@@ -958,8 +958,8 @@ async function toggleTTS() {
 
   if (TTS_ENABLED) {
     // ONにしたとき
-    await ensureAudio();
-    await startTimeSignal();
+    ensureAudio();
+    startTimeSignal();
   } else {
     // OFFにしたとき
     stopTimeSignal();
@@ -984,12 +984,40 @@ async function toggleTTS() {
 
 document.getElementById("ttsToggle").addEventListener("click", async () => {
   await initTTS();        // iOSはユーザー操作の中でTTSエンジンを起こす
+  
+  // ★★★ iOS対策: ユーザー操作内で即座にspeak()を呼んでエンジンを完全起動 ★★★
+  const wasOff = !TTS_ENABLED;
   toggleTTS();
+  
+  if (wasOff && TTS_ENABLED && 'speechSynthesis' in window && chosenVoice) {
+    // OFF→ON になった場合、即座に無音発話でエンジンをアクティブ化
+    const warmup = new SpeechSynthesisUtterance("　");
+    warmup.voice = chosenVoice;
+    warmup.lang = 'ja';
+    warmup.volume = 0.01;
+    warmup.rate = 3;
+    speechSynthesis.speak(warmup);
+  }
+  // ★★★ ここまで ★★★
 });
+
 
 document.getElementById("ttsToggle2").addEventListener("click", async () => {
   await initTTS();
+  
+  // ★★★ iOS対策: ユーザー操作内で即座にspeak()を呼んでエンジンを完全起動 ★★★
+  const wasOff = !TTS_ENABLED;
   toggleTTS();
+  
+  if (wasOff && TTS_ENABLED && 'speechSynthesis' in window && chosenVoice) {
+    const warmup = new SpeechSynthesisUtterance("　");
+    warmup.voice = chosenVoice;
+    warmup.lang = 'ja';
+    warmup.volume = 0.01;
+    warmup.rate = 3;
+    speechSynthesis.speak(warmup);
+  }
+  // ★★★ ここまで ★★★
 });
 
 // syncBtn は「再読み込み」ボタン。
@@ -1998,7 +2026,7 @@ async function typeOut(seed, cpsBase, ev, msgEl) {
 // 音声関連
 // ==========================================
 
-async function ensureAudio() {
+function ensureAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -2026,7 +2054,7 @@ async function ensureAudio() {
   }
 
   if (audioCtx.state === "suspended") {
-    await audioCtx.resume();
+    audioCtx.resume();
   }
 }
 
@@ -2172,9 +2200,9 @@ function toneNTT(kind) {
   osc.stop(t0 + (p.dur / 1000) + p.rel + 0.05);
 }
 // ▼▼▼【変更】引数にshowOverlayを追加 ▼▼▼
-async function playEmergencyBeep(durationMs, showOverlay = true) {
+function playEmergencyBeep(durationMs, showOverlay = true) {
   if (!TTS_ENABLED || !audioCtx) return Promise.resolve();
-  await ensureAudio();
+  ensureAudio();
 
   // ▼▼▼【変更】showOverlayがtrueの時のみ警告画面を表示 ▼▼▼
   const overlay = document.getElementById('emergency-overlay');
@@ -2222,10 +2250,10 @@ async function playEmergencyBeep(durationMs, showOverlay = true) {
     };
   });
 }
-async function startTimeSignal() {
+function startTimeSignal() {
   if (tickTimer) clearTimeout(tickTimer);
   if (!TTS_ENABLED) return;
-  await ensureAudio();
+  ensureAudio();
 
   const tick = () => {
     if (!TTS_ENABLED) { 
@@ -2539,7 +2567,7 @@ async function runSystem() {
       await sleep(500);
   }
   if (TTS_ENABLED) {
-    await ensureAudio();
+    ensureAudio();
     playChirp('start');
     startWhiteNoise();
   }
@@ -2704,14 +2732,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const specialAlertModeBtn = document.getElementById("specialAlertModeToggle");
   if (specialAlertModeBtn) {
-    specialAlertModeBtn.addEventListener("click", async () => {
+    specialAlertModeBtn.addEventListener("click", () => {
       isSpecialAlertMode = !isSpecialAlertMode;
       specialAlertModeBtn.textContent = `ドラマチックモード: ${isSpecialAlertMode ? "ON" : "OFF"}`;
       specialAlertModeBtn.classList.toggle("active", isSpecialAlertMode);
       saveSettings();
       if (TTS_ENABLED) {
-        await ensureAudio();
-        if (isSpecialAlertMode) { await playEmergencyBeep(400, false); }
+        ensureAudio();
+        if (isSpecialAlertMode) { playEmergencyBeep(400, false); }
         else { playChirp('end'); }
       }
     });
@@ -2762,9 +2790,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     saveSettings();
   });
-  sfxSlider.addEventListener('change', async () => {
-    await ensureAudio();
-    await playEmergencyBeep(1000, false);
+  sfxSlider.addEventListener('change', () => {
+    ensureAudio();
+    playEmergencyBeep(1000, false);
   });
 
   const timeSigSlider = document.getElementById("timeSigVolumeSlider");
@@ -2776,9 +2804,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     saveSettings();
   });
-  timeSigSlider.addEventListener('change', async () => {
+  timeSigSlider.addEventListener('change', () => {
     // TTSがONのときだけ、"ピッ" を1回鳴らして確認できるようにする
-    await ensureAudio();
+    ensureAudio();
     toneNTT('pip');
   });
 
