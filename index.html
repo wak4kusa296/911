@@ -558,9 +558,12 @@ function saveSettings() {
 async function loadSettings() {
   const savedSettings = localStorage.getItem(SETTINGS_KEY);
   if (!savedSettings) {
+    // 初回デフォルト
     const commanderInput = document.getElementById("commanderInput");
     document.getElementById("systemTitle").textContent =
       `${commanderInput.value.trim()}通信指令シミュレータ`;
+
+    // 音声OFF扱いなのでスライダー無効化
     const sliders = document.querySelectorAll('.rate-slider, #voiceSel');
     sliders.forEach(el => el.classList.add('disabled'));
     return;
@@ -576,10 +579,7 @@ async function loadSettings() {
     document.getElementById("systemTitle").textContent =
       `${commanderName}通信指令シミュレータ`;
 
-    // 🔸 AudioContextを安全に初期化
-    await ensureAudio();
-
-    // 🔸 スライダー復元
+    // スライダー値をUIに戻す
     const sliders = {
       rateSlider:           { valueId: 'rateValue',           key: 'ttsRate',        fixed: 1, globalVar: 'ttsRate' },
       masterVolumeSlider:   { valueId: 'masterVolumeValue',   key: 'masterVolume',   fixed: 2 },
@@ -593,42 +593,77 @@ async function loadSettings() {
       if (settings[data.key] !== undefined) {
         const sliderEl = document.getElementById(sliderId);
         const value = parseFloat(settings[data.key]);
-        sliderEl.value = value;
-        document.getElementById(data.valueId).textContent = value.toFixed(data.fixed);
 
-        if (data.globalVar === 'ttsRate') ttsRate = value;
-        if (data.globalVar === 'ttsVolume') ttsVolume = value;
+        sliderEl.value = value;
+        document.getElementById(data.valueId).textContent =
+          value.toFixed(data.fixed);
+
+        if (data.globalVar === 'ttsRate') {
+          ttsRate = value;
+        } else if (data.globalVar === 'ttsVolume') {
+          ttsVolume = value;
+        }
       }
     }
 
-    // 🔸 AudioContextが確実にある状態でGainを反映
-    if (masterGain && settings.masterVolume !== undefined)
-      masterGain.gain.value = parseFloat(settings.masterVolume);
-    if (timeSigGain && settings.timeSigVolume !== undefined)
-      timeSigGain.gain.value = parseFloat(settings.timeSigVolume);
-    if (sfxGain && settings.sfxVolume !== undefined)
-      sfxGain.gain.value = parseFloat(settings.sfxVolume);
-    if (noiseGain && settings.noiseVolume !== undefined)
-      noiseGain.gain.value = parseFloat(settings.noiseVolume);
+    // GainNode側へ反映（AudioContextが既にある場合だけ）
+    if (masterGain && settings.masterVolume !== undefined) {
+      masterGain.gain.setValueAtTime(
+        parseFloat(settings.masterVolume),
+        audioCtx?.currentTime || 0
+      );
+    }
+    if (timeSigGain && settings.timeSigVolume !== undefined) {
+      timeSigGain.gain.setValueAtTime(
+        parseFloat(settings.timeSigVolume),
+        audioCtx?.currentTime || 0
+      );
+    }
+    if (sfxGain && settings.sfxVolume !== undefined) {
+      sfxGain.gain.setValueAtTime(
+        parseFloat(settings.sfxVolume),
+        audioCtx?.currentTime || 0
+      );
+    }
+    if (noiseGain && settings.noiseVolume !== undefined) {
+      noiseGain.gain.setValueAtTime(
+        parseFloat(settings.noiseVolume),
+        audioCtx?.currentTime || 0
+      );
+    }
 
-    // 特別警戒モード
+    // 特別警戒モード状態
     if (typeof settings.isSpecialAlertMode === 'boolean') {
       isSpecialAlertMode = settings.isSpecialAlertMode;
       const specialAlertModeBtn = document.getElementById("specialAlertModeToggle");
-      specialAlertModeBtn.textContent = `特別警戒: ${isSpecialAlertMode ? "ON" : "OFF"}`;
+      specialAlertModeBtn.textContent =
+        `特別警戒: ${isSpecialAlertMode ? "ON" : "OFF"}`;
       specialAlertModeBtn.classList.toggle("active", isSpecialAlertMode);
     }
 
-    // Safari対応: 音声初期化
+    // ===============================
+    // Safari / iOS / macOS 対応:
+    // 音声リストを安定取得して chosenVoice を決める
+    // ===============================
+    const voiceSelect = document.getElementById('voiceSel');
     if ('speechSynthesis' in window) {
-      const voiceSelect = document.getElementById('voiceSel');
       const voicesReady = new Promise(resolve => {
         let voices = speechSynthesis.getVoices();
-        if (voices.length) resolve(voices);
-        else window.addEventListener('voiceschanged', () => resolve(speechSynthesis.getVoices()), { once: true });
+        if (voices.length) {
+          resolve(voices);
+        } else {
+          // Safariは初回ここに入る: voiceschanged を1回だけ待つ
+          window.addEventListener(
+            'voiceschanged',
+            () => resolve(speechSynthesis.getVoices()),
+            { once: true }
+          );
+        }
       });
 
       const voices = await voicesReady;
+
+      // 音声選択肢を更新（日本語優先）
       voiceSelect.innerHTML = voices
         .filter(v => /^ja/i.test(v.lang))
         .map((v, i) => `<option value="${i}">${v.name} (${v.lang})</option>`)
@@ -636,7 +671,12 @@ async function loadSettings() {
 
       const voiceIndex = parseInt(settings.voiceIndex) || 0;
       voiceSelect.value = voiceIndex;
-      chosenVoice = voices[voiceIndex] || voices.find(v => /^ja/i.test(v.lang)) || voices[0];
+
+      chosenVoice =
+        voices[voiceIndex] ||
+        voices.find(v => /^ja/i.test(v.lang)) ||
+        voices[0] ||
+        null;
     }
 
   } catch (e) {
@@ -2080,46 +2120,53 @@ function loadVoices() {
   speechSynthesis.onvoiceschanged = load;
 }
 loadVoices();
+
 async function speakMessage(text, isTest = false) {
-  // ▼▼▼【修正】Promiseの引数に reject を追加 ▼▼▼
   return new Promise((resolve, reject) => {
-    // 50ms待機
-    setTimeout(() => {
+    setTimeout(async () => {
       if (!('speechSynthesis' in window)) {
-        // 音声合成が利用できない場合は即時完了させる
         resolve();
         return;
       }
 
-      const masterVol = masterGain ? masterGain.gain.value : parseFloat(document.getElementById("masterVolumeSlider").value);
+      // 🔽 ここを追加
+      if (!chosenVoice) {
+        const voicesRetry = speechSynthesis.getVoices();
+        if (voicesRetry.length > 0) {
+          chosenVoice =
+            voicesRetry.find(v => /^ja/i.test(v.lang)) ||
+            voicesRetry[0] ||
+            null;
+        }
+      }
+      // 🔼 ここまで追加
+
+      const masterVol = masterGain
+        ? masterGain.gain.value
+        : parseFloat(document.getElementById("masterVolumeSlider").value);
+
       const utter = new SpeechSynthesisUtterance(text);
-      
-      utter.voice = chosenVoice;
+      utter.voice = chosenVoice || null; // nullでもOK、OSデフォルトで読んでくれる
       utter.rate = ttsRate;
       utter.volume = ttsVolume * masterVol;
-      
-      // ▼▼▼【重要】読み上げ完了時にPromiseを解決する ▼▼▼
+
       utter.onend = resolve;
-      // ▼▼▼【重要】エラー発生時にもPromiseを完了させる ▼▼▼
-      // ▼▼▼【修正】エラーの種類を判別する ▼▼▼
       utter.onerror = (e) => {
-        // 'interrupted' はユーザーによるキャンセルなので、エラー扱いにせず正常終了とする
         if (e.error === 'interrupted') {
           resolve();
         } else {
-          // それ以外のエラーはコンソールに表示してエラー終了とする
           console.error("SpeechSynthesisUtterance.onerror", e);
           reject(e);
         }
       };
-      
-      // さらに50ms待機してからspeak()
+
       setTimeout(() => {
         speechSynthesis.speak(utter);
       }, 50);
     }, 50);
   });
 }
+
 
 /// ==========================================
 // メインループ
