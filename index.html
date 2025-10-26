@@ -2493,7 +2493,7 @@ async function runSystem() {
   const ts = document.createElement("div");
   ts.className = "msg-time";
   const ts_now = new Date();
-  ts.textContent = ts_now.toLocaleTimeString("ja-JP", { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  ts.textContent = ts_now.toLocaleTimeString("ja", { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const ch = document.createElement("div");
   ch.className = `msg-level lv${event.level}`;
   ch.textContent = `LV${event.level}`;
