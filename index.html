@@ -855,18 +855,29 @@ async function initTTS() {
         const voices = await getStableVoices();
         if (voices && voices.length > 0) {
           const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
-          const renderList = jaVoices.length > 0 ? jaVoices : voices;
+          const listForSelect = jaVoices.length > 0 ? jaVoices : voices;
 
-          voiceSelect.innerHTML = renderList
-            .map((v, i) => `<option value="${i}">${v.name} (${v.lang})</option>`)
+          // (B) セレクトを構築する。optionのvalueに「元のvoices配列のインデックス」を埋める
+          voiceSelect.innerHTML = listForSelect
+            .map(v => {
+              const realIndex = voices.indexOf(v); // ←これがズレ防止の肝
+              return `<option value="${realIndex}">${v.name} (${v.lang})</option>`;
+            })
             .join('');
 
+          // (C) chosenVoice を決める (jaVoices[0] を優先)
           chosenVoice =
             jaVoices[0] ||
             voices[0] ||
             null;
 
-          voiceSelect.value = "0";
+          // UI上の選択状態を chosenVoice に合わせる
+          if (chosenVoice) {
+            const chosenRealIndex = voices.indexOf(chosenVoice);
+            if (chosenRealIndex >= 0) {
+              voiceSelect.value = String(chosenRealIndex);
+            }
+          }
           console.log('[TTS:initTTS] chosenVoice:', chosenVoice);
         }
 
