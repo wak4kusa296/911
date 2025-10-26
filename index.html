@@ -557,6 +557,7 @@ function saveSettings() {
 
 async function loadSettings() {
   const savedSettings = localStorage.getItem(SETTINGS_KEY);
+
   if (!savedSettings) {
     // 初回デフォルト
     const commanderInput = document.getElementById("commanderInput");
@@ -572,15 +573,19 @@ async function loadSettings() {
   try {
     const settings = JSON.parse(savedSettings);
 
-    // 本部名
+    // =========================
+    // 1. 本部名などの基本設定復元
+    // =========================
     const commanderInput = document.getElementById('commanderInput');
     commanderName = settings.commanderName || "本部";
     commanderInput.value = commanderName;
     document.getElementById("systemTitle").textContent =
       `${commanderName}通信指令シミュレータ`;
 
-    // スライダー値をUIに戻す
-    const sliders = {
+    // =========================
+    // 2. スライダー値の復元
+    // =========================
+    const slidersMap = {
       rateSlider:           { valueId: 'rateValue',           key: 'ttsRate',        fixed: 1, globalVar: 'ttsRate' },
       masterVolumeSlider:   { valueId: 'masterVolumeValue',   key: 'masterVolume',   fixed: 2 },
       ttsVolumeSlider:      { valueId: 'ttsVolumeValue',      key: 'ttsVolume',      fixed: 2, globalVar: 'ttsVolume' },
@@ -589,14 +594,19 @@ async function loadSettings() {
       noiseVolumeSlider:    { valueId: 'noiseVolumeValue',    key: 'noiseVolume',    fixed: 2 },
     };
 
-    for (const [sliderId, data] of Object.entries(sliders)) {
+    for (const [sliderId, data] of Object.entries(slidersMap)) {
       if (settings[data.key] !== undefined) {
         const sliderEl = document.getElementById(sliderId);
         const value = parseFloat(settings[data.key]);
 
-        sliderEl.value = value;
-        document.getElementById(data.valueId).textContent =
-          value.toFixed(data.fixed);
+        if (sliderEl) {
+          sliderEl.value = value;
+        }
+
+        const valueEl = document.getElementById(data.valueId);
+        if (valueEl) {
+          valueEl.textContent = value.toFixed(data.fixed);
+        }
 
         if (data.globalVar === 'ttsRate') {
           ttsRate = value;
@@ -606,77 +616,165 @@ async function loadSettings() {
       }
     }
 
-    // GainNode側へ反映（AudioContextが既にある場合だけ）
-    if (masterGain && settings.masterVolume !== undefined) {
+    // =========================
+    // 3. 既にAudioノードがある場合だけゲインを反映
+    //    （AudioContextまわりは触らない。TTSだけが目的）
+    // =========================
+    if (typeof masterGain !== "undefined" &&
+        masterGain &&
+        settings.masterVolume !== undefined) {
       masterGain.gain.setValueAtTime(
         parseFloat(settings.masterVolume),
         audioCtx?.currentTime || 0
       );
     }
-    if (timeSigGain && settings.timeSigVolume !== undefined) {
+
+    if (typeof timeSigGain !== "undefined" &&
+        timeSigGain &&
+        settings.timeSigVolume !== undefined) {
       timeSigGain.gain.setValueAtTime(
         parseFloat(settings.timeSigVolume),
         audioCtx?.currentTime || 0
       );
     }
-    if (sfxGain && settings.sfxVolume !== undefined) {
+
+    if (typeof sfxGain !== "undefined" &&
+        sfxGain &&
+        settings.sfxVolume !== undefined) {
       sfxGain.gain.setValueAtTime(
         parseFloat(settings.sfxVolume),
         audioCtx?.currentTime || 0
       );
     }
-    if (noiseGain && settings.noiseVolume !== undefined) {
+
+    if (typeof noiseGain !== "undefined" &&
+        noiseGain &&
+        settings.noiseVolume !== undefined) {
       noiseGain.gain.setValueAtTime(
         parseFloat(settings.noiseVolume),
         audioCtx?.currentTime || 0
       );
     }
 
-    // 特別警戒モード状態
+    // =========================
+    // 4. 特別警戒モードの復元
+    // =========================
     if (typeof settings.isSpecialAlertMode === 'boolean') {
       isSpecialAlertMode = settings.isSpecialAlertMode;
       const specialAlertModeBtn = document.getElementById("specialAlertModeToggle");
-      specialAlertModeBtn.textContent =
-        `特別警戒: ${isSpecialAlertMode ? "ON" : "OFF"}`;
-      specialAlertModeBtn.classList.toggle("active", isSpecialAlertMode);
+      if (specialAlertModeBtn) {
+        specialAlertModeBtn.textContent =
+          `特別警戒: ${isSpecialAlertMode ? "ON" : "OFF"}`;
+        specialAlertModeBtn.classList.toggle("active", isSpecialAlertMode);
+      }
     }
 
-    // ===============================
-    // Safari / iOS / macOS 対応:
-    // 音声リストを安定取得して chosenVoice を決める
-    // ===============================
+    // =========================
+    // 5. TTS音声（Apple対応ここが本題）
+    // =========================
+    // 目的:
+    // - iOS / macOS Safari は getVoices() が最初 空配列[] のことがある
+    // - voiceschanged イベントがそもそも発火しない場合もある
+    // - なので「無音1文字を一回だけ speak() してからもう一回 getVoices()」という
+    //   ハックを使って、できるだけ確実に声を取得する
+    //
+    // さらに:
+    // - まだ1つもvoiceが取れなかった場合はUIもchosenVoiceも無理に触らない
+    //   → Safariが遅延初期化中でも落ちない
+    // - 取得できた場合だけ voiceSel を更新し、chosenVoice を決定する
+    //
     const voiceSelect = document.getElementById('voiceSel');
-    if ('speechSynthesis' in window) {
-      const voicesReady = new Promise(resolve => {
+
+    if ('speechSynthesis' in window && voiceSelect) {
+      // 内部ユーティリティ: 安定してvoicesを取る
+      async function getStableVoices() {
+        // 1. まず普通に取得
         let voices = speechSynthesis.getVoices();
-        if (voices.length) {
-          resolve(voices);
-        } else {
-          // Safariは初回ここに入る: voiceschanged を1回だけ待つ
+        if (voices.length > 0) return voices;
+
+        // 2. iOS Safari 対策: 無音Utteranceで刺激
+        await new Promise(r => {
+          const u = new SpeechSynthesisUtterance(' ');
+          u.volume = 0;
+          u.rate = 1;
+          u.onend = r;
+          try {
+            speechSynthesis.speak(u);
+          } catch (_) {
+            // speak() が例外になっても、とりあえず続ける
+            r();
+          }
+        });
+
+        // 3. もう一回試す
+        voices = speechSynthesis.getVoices();
+        if (voices.length > 0) return voices;
+
+        // 4. それでも空なら、
+        //    voiceschanged を once で待つ or 500msタイムアウトで諦める
+        return await new Promise(resolve => {
+          let done = false;
+          function finish(vs) {
+            if (done) return;
+            done = true;
+            resolve(vs);
+          }
+
+          // もう一度直後の状態をチェック
+          const vsNow = speechSynthesis.getVoices();
+          if (vsNow.length > 0) {
+            finish(vsNow);
+            return;
+          }
+
           window.addEventListener(
             'voiceschanged',
-            () => resolve(speechSynthesis.getVoices()),
+            () => finish(speechSynthesis.getVoices()),
             { once: true }
           );
+
+          setTimeout(() => {
+            finish(speechSynthesis.getVoices());
+          }, 500);
+        });
+      }
+
+      const voices = await getStableVoices();
+
+      // voices がまだ空 = Safariがまだ音声リストを返せてない状態
+      // → この場合はUI/選択などは触らず、chosenVoiceはnullのまま
+      if (!voices || voices.length === 0) {
+        console.warn('[TTS] No voices available yet (Safari delayed).');
+        chosenVoice = null;
+      } else {
+        // 候補を作る（日本語優先。なければ全体）
+        const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
+        const renderList = jaVoices.length > 0 ? jaVoices : voices;
+
+        // セレクトボックスを描画し直し
+        voiceSelect.innerHTML = renderList
+          .map((v, i) => `<option value="${i}">${v.name} (${v.lang})</option>`)
+          .join('');
+
+        // 設定からのvoiceIndexをできるだけ尊重
+        const idxFromSettings = parseInt(settings.voiceIndex);
+        let chosenFromSettings = null;
+        if (!isNaN(idxFromSettings) && voices[idxFromSettings]) {
+          chosenFromSettings = voices[idxFromSettings];
         }
-      });
 
-      const voices = await voicesReady;
+        // chosenVoiceを決定
+        chosenVoice =
+          chosenFromSettings ||
+          jaVoices[0] ||
+          voices[0] ||
+          null;
 
-      // 音声選択肢を更新（日本語優先）
-      voiceSelect.innerHTML = voices
-        .filter(v => /^ja/i.test(v.lang))
-        .map((v, i) => `<option value="${i}">${v.name} (${v.lang})</option>`)
-        .join('');
+        // UI上の選択状態はとりあえず0番目にする
+        voiceSelect.value = "0";
 
-      const voiceIndex = parseInt(settings.voiceIndex) || 0;
-      voiceSelect.value = voiceIndex;
-
-      chosenVoice =
-        voices[voiceIndex] ||
-        voices.find(v => /^ja/i.test(v.lang)) ||
-        voices[0] ||
-        null;
+        console.log('[TTS] chosenVoice:', chosenVoice);
+      }
     }
 
   } catch (e) {
