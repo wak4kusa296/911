@@ -529,6 +529,7 @@ let scrollTimeout = null;
 
 let ttsAbort = false;
 let ttsTestTimer = null;
+let __didLoadSettings = false;
 
 
 
@@ -561,6 +562,12 @@ function saveSettings() {
 }
 
 async function loadSettings() {
+  if (__didLoadSettings) {
+    return;
+  }
+  __didLoadSettings = true;
+
+
   const savedSettings = localStorage.getItem(SETTINGS_KEY);
 
   if (!savedSettings) {
@@ -2339,96 +2346,89 @@ function loadVoices() {
 loadVoices();
 
 async function speakMessage(text, isTest = false) {
-  await initTTS(); // iOSならここでTTSをウォームアップ
-
-  return new Promise(async (resolve, reject) => {
-    // 少し待って安定させる
-    setTimeout(async () => {
+  return new Promise((resolve, reject) => {
+    // ちょい待ち（既存ロジックを維持）
+    setTimeout(() => {
       if (!('speechSynthesis' in window)) {
         resolve();
         return;
       }
 
-      // これからしゃべるので、これは「今の読み上げ＝アクティブ」
-      ttsAbort = false;
-
-      // iOSバグ回避：読み上げ中はWebAudioを止める
-      let suspended = false;
-      if (isiOS() && audioCtx && audioCtx.state === 'running') {
-        try {
-          await audioCtx.suspend();
-          suspended = true;
-        } catch {}
+      // ---- ここが重要：UIから最新状態を再取得する ----
+      // 速度
+      const rateSliderEl = document.getElementById("rateSlider");
+      if (rateSliderEl) {
+        ttsRate = parseFloat(rateSliderEl.value) || ttsRate;
       }
 
-      const masterVol = masterGain
-        ? masterGain.gain.value
-        : parseFloat(document.getElementById("masterVolumeSlider").value || "1");
+      // 音量（TTS用ボリューム、マスター含む）
+      const ttsVolumeSliderEl = document.getElementById("ttsVolumeSlider");
+      if (ttsVolumeSliderEl) {
+        ttsVolume = parseFloat(ttsVolumeSliderEl.value) || ttsVolume;
+      }
 
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.voice  = chosenVoice || null;
-      utter.lang   = (chosenVoice && chosenVoice.lang) ? chosenVoice.lang : 'ja-JP';
-      utter.rate   = isiOS() ? Math.min(ttsRate, 1.2) : ttsRate;
-      utter.pitch  = 1.0;
-      utter.volume = (ttsVolume ?? 1.0) * masterVol;
-
-      let didCleanup = false;
-      const cleanup = async (ok = true, err = null) => {
-        if (didCleanup) return;   // ← 二重実行防止
-        didCleanup = true;
-
-        // トグルOFF等で「もう音いらない」状態なら、resumeすらやらなくていい
-        if (!TTS_ENABLED) {
-          // 読み上げ終わり直後にTTS切ったケースでは
-          // audioCtxは明示的にresumeしない（iOS側の安全策）
-        } else {
-          if (suspended && audioCtx && audioCtx.state === 'suspended') {
-            try { await audioCtx.resume(); } catch {}
-          }
+      let masterVol = 1.0;
+      if (masterGain) {
+        masterVol = masterGain.gain.value;
+      } else {
+        const mvEl = document.getElementById("masterVolumeSlider");
+        if (mvEl) {
+          masterVol = parseFloat(mvEl.value) || masterVol;
         }
+      }
 
-        if (ok) {
+      // voiceSelect から voice を取り直して chosenVoice を更新
+      const voiceSelectEl = document.getElementById("voiceSel");
+      if (voiceSelectEl && 'speechSynthesis' in window) {
+        const allVoices = speechSynthesis.getVoices();
+        const idx = parseInt(voiceSelectEl.value);
+        if (!isNaN(idx)) {
+          // voiceSelectに表示しているリストとallVoicesのindexは
+          // 厳密にはズレる場合があるけど、
+          // 実運用で「表示してるのは先頭から順番」の前提で合わせにいく
+          chosenVoice =
+            allVoices[idx] ||
+            chosenVoice ||
+            allVoices.find(v => /^ja/i.test(v.lang)) ||
+            allVoices[0] ||
+            null;
+        }
+      }
+
+      // chosenVoice がいまだに取れない場合、最後にフォールバック
+      if (!chosenVoice) {
+        const retryVoices = speechSynthesis.getVoices();
+        if (retryVoices.length > 0) {
+          chosenVoice =
+            retryVoices.find(v => /^ja/i.test(v.lang)) ||
+            retryVoices[0] ||
+            null;
+        }
+      }
+
+      // ---- Utteranceを生成して再生 ----
+      const utter = new SpeechSynthesisUtterance(text);
+
+      // voice が null でもOK（iOSはOSデフォルトで読む）
+      utter.voice = chosenVoice || null;
+      utter.rate = ttsRate;
+      utter.volume = ttsVolume * masterVol;
+
+      utter.onend = resolve;
+      utter.onerror = (e) => {
+        if (e.error === 'interrupted') {
           resolve();
         } else {
-          reject(err);
-        }
-      };
-
-      utter.onend = () => {
-        cleanup(true);
-      };
-
-      utter.onerror = (e) => {
-        // "interrupted" はcancel()による中断。ユーザーがOFFにしただけなので正常扱い
-        if (e.error === 'interrupted' || e.error === 'canceled' || e.error === 'cancellation') {
-          cleanup(true);
-        } else {
           console.error("SpeechSynthesisUtterance.onerror", e);
-          cleanup(false, e);
+          reject(e);
         }
       };
 
-      // まず古い読み上げが残ってたら消す
-      // ただし iOS は cancel()→即speak() が無音になるので、1フレーム遅延してから speak
-      try {
-        if (speechSynthesis.speaking || speechSynthesis.pending) {
-          speechSynthesis.cancel();
-        }
-      } catch {}
-
+      // Safari安定化のためにわずかに遅延
       setTimeout(() => {
-        // OFFにされた後ならもう喋らない
-        if (ttsAbort || !TTS_ENABLED) {
-          cleanup(true);
-          return;
-        }
+        speechSynthesis.speak(utter);
+      }, 50);
 
-        try {
-          speechSynthesis.speak(utter);
-        } catch (err) {
-          cleanup(false, err);
-        }
-      }, 0);
     }, 50);
   });
 }
@@ -2768,6 +2768,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     ttsTestTimer = setTimeout(async () => {
       if ('speechSynthesis' in window && TTS_ENABLED) {
         try {
+          speechSynthesis.cancel();
           // OFF中は喋らない、ONなら1回だけテスト
           await speakMessage("音量テスト", true);
         } catch (err) {
