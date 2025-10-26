@@ -864,37 +864,8 @@ async function initTTS() {
   }
   
   // 2. <select>（ドロップダウン）を構築
-
-  // ▼▼▼【修正】Siriを優先的に含め、Eloquenceを除外する ▼▼▼
-  
-  // 2a. ボイスの分類 (Siri, 他の日本語, Eloquence)
-  // Web Speech APIが返すボイス名はOSによって異なる
-  
-  // 2a-1. "Siri" の文字列を含む日本語ボイスを最優先
-  const siriVoices = voices.filter(v => 
-      v.name.toLowerCase().includes('siri') && /^ja/i.test(v.lang)
-  );
-
-  // 2a-2. "Siri" と "Eloquence" を除く、他の日本語ボイス
-  const otherJaVoices = voices.filter(v =>
-      /^ja/i.test(v.lang) && 
-      !v.name.toLowerCase().includes('siri') &&
-      !v.name.toLowerCase().includes('eloquence') // Eloquenceを除外
-  );
-  
-  // 2b. リストの決定 (Siri > 他の日本語)
-  const jaVoices = [...siriVoices, ...otherJaVoices];
-  
-  let listForSelect;
-  if (jaVoices.length > 0) {
-      // 日本語ボイスが1件でもあれば、それをリストとする
-      listForSelect = jaVoices;
-  } else {
-      // 日本語ボイスがなければ、全言語からEloquenceを除外したリスト
-      listForSelect = voices.filter(v => !v.name.toLowerCase().includes('eloquence'));
-  }
-  // ▲▲▲【修正】ここまで ▲▲▲
-
+  const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
+  const listForSelect = jaVoices.length > 0 ? jaVoices : voices;
 
   // HTMLにある <option value=""> はクリアして再構築
   voiceSelect.innerHTML = '<option value="">音声自動選択</option>';
@@ -2403,15 +2374,28 @@ function stopTimeSignal() {
   });
 })();
 
-// ▼▼▼【変更】speakMessageをリファクタリング。iOSでの安定性を高める ▼▼▼
-async function speakMessage(text) { // 'isTest' パラメータを削除
+// ▼▼▼【変更】iOSのバグ回避ロジック（suspend, rate limit, setTimeout）を全て適用 ▼▼▼
+async function speakMessage(text) {
   // 1. 即座に Promise を返す
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => { // ★ async (resolve) に変更
     if (!('speechSynthesis' in window)) {
       console.warn("[TTS] speechSynthesis not supported.");
       resolve();
       return;
     }
+
+    // ★★★【追加】iOSオーディオ競合対策 (Patch 2 Logic A) ★★★
+    // TTS再生中、WebAudio(効果音/ノイズ)を一時停止する
+    let suspended = false;
+    if (isiOS() && audioCtx && audioCtx.state === 'running') {
+        try {
+            await audioCtx.suspend();
+            suspended = true;
+        } catch (e) {
+            console.warn('audioCtx.suspend() failed', e);
+        }
+    }
+    // ★★★【追加】ここまで ★★★
 
     // 2. UIから最新の値を「同期的」に取得
     const rateSliderEl = document.getElementById("rateSlider");
@@ -2440,70 +2424,81 @@ async function speakMessage(text) { // 'isTest' パラメータを削除
     }
 
     const allVoices = speechSynthesis.getVoices();
-    let effectiveVoice = chosenVoice; // グローバル変数をフォールバックとして使用
+    let effectiveVoice = chosenVoice; 
 
-    // 3. ボイスの選択ロジック (initTTS と同じロジックを踏襲)
+    // 3. ボイスの選択ロジック (省略)
     if (voiceSelectEl && allVoices.length > 0) {
       const idx = parseInt(voiceSelectEl.value);
       if (!isNaN(idx) && allVoices[idx]) {
-        // UIで特定の声が選択されている
         effectiveVoice = allVoices[idx];
       } else {
-        // UIが「自動選択」("") の場合、または chosenVoice が未設定の場合
-        // グローバルの chosenVoice を信じるか、再検索する
-        if (!effectiveVoice) { // chosenVoice が null/undefined の場合の安全策
+        if (!effectiveVoice) {
             effectiveVoice = allVoices.find(v => /^ja/i.test(v.lang)) || allVoices[0] || null;
         }
       }
     } else if (!effectiveVoice && allVoices.length > 0) {
-        // voiceSelectEl がないか、voicesが空だった場合のフォールバック
         effectiveVoice = allVoices.find(v => /^ja/i.test(v.lang)) || allVoices[0] || null;
     }
     
     // 4. 日本語ボイスが確保できているか最終確認
-    const isJa = !!(effectiveVoice && effectiveVoice.lang && /^ja/i.test(effectiveVoice.lang));
-    
-    if (!effectiveVoice || !isJa) {
-        console.warn("[TTS] No valid Japanese voice found. Skipping speak().", effectiveVoice);
-        resolve();
+    // (※全言語対応のため、このチェックを緩和)
+    if (!effectiveVoice) {
+        console.warn("[TTS] No valid voice found. Skipping speak().", effectiveVoice);
+        resolve(); // resolveは呼ぶ
         return;
     }
 
     // 5. Utteranceを生成
     const utter = new SpeechSynthesisUtterance(text);
     utter.voice = effectiveVoice;
-    utter.lang = 'ja'; // iOSは 'ja' の方が安定する
-    utter.rate   = effectiveRate;
+    // utter.lang = 'ja'; // voiceオブジェクトに追従させるためコメントアウト
+    utter.lang  = (effectiveVoice?.lang) || 'ja-JP';
+
+    // ★★★【変更】iOSレート制限 (Patch 2 Logic C) ★★★
+    utter.rate   = isiOS() ? Math.min(effectiveRate, 1.2) : effectiveRate;
     utter.volume = effectiveTtsVol * effectiveMasterVol;
     
-    // chosenVoice を今使ったもので更新 (次回のフォールバックのため)
     chosenVoice = effectiveVoice;
 
     // 6. イベントハンドラ
-    utter.onend = () => {
-      resolve();
+    const cleanup = async () => {
+        // ★★★【追加】iOSオーディオ競合対策 (Patch 2 Logic A) ★★★
+        // 一時停止していたWebAudioを再開
+        if (suspended && audioCtx?.state === 'suspended') {
+            try { await audioCtx.resume(); } catch {}
+        }
+        // ★★★【追加】ここまで ★★★
+        resolve();
     };
+    
+    utter.onend = cleanup;
     utter.onerror = (e) => {
-      // iOSでは、speak() 中に speak() が呼ばれると 'interrupted' で onerror になる
-      // これをエラー扱いせず、resolve() して次の処理に進める
       console.warn("SpeechSynthesisUtterance.onerror (treated as resolve)", e.error);
-      resolve();
+      cleanup(); // onerrorでもcleanupを呼んでaudioCtx.resume()を保証
     };
 
     // 7. 実行
-    // ★ 危険なネストした setTimeout を削除 ★
-    // initTTS で一度アンロックされていれば、これは動作するはず
-    // わずかな遅延は、メインスレッドをブロックしないために残す
     try {
-        // ★★★ iOSの安全策として、speakの直前にcancelを入れる ★★★
-        // (設定スライダーがこれで成功していたため)
-        speechSynthesis.cancel(); 
-        speechSynthesis.speak(utter);
+        // 直前の発話が残っていると speak() が失敗/無音になるため、必ず止める
+        if(speechSynthesis.speaking || speechSynthesis.pending){
+            speechSynthesis.cancel();
+        }
     } catch (e) {
-        console.error("[TTS] speech.speak() failed:", e);
-        resolve(); // エラーが起きてもPromiseチェーンを止めない
+        console.warn('speechSynthesis.cancel() failed', e);
     }
-    // ★ setTimeout(() => { ... }, 10); を削除
+
+    // ★★★【変更】iOSのcancel/speakバグ回避 (Patch 2 Logic D) ★★★
+    // cancel() の直後に speak() を呼ぶとiOSで無視されるため、
+    // 0ms遅延させて次のフレームで実行する
+    setTimeout(() => {
+        try {
+            speechSynthesis.speak(utter);
+        } catch (e) {
+            console.error("[TTS] speech.speak() failed:", e);
+            cleanup(); // speak自体が即時失敗した場合もcleanup
+        }
+    }, 0); // 0msの遅延が必須
+    
   });
 }
 // ▲▲▲【変更】speakMessageの修正ここまで ▲▲▲
@@ -2575,8 +2570,18 @@ async function runSystem() {
   }
   if (TTS_ENABLED) {
     ensureAudio();
-    playChirp('start');
-    startWhiteNoise();
+    
+    // 1. まずスタート音を鳴らす (iOSでも鳴らす)
+    playChirp('start'); 
+
+    if (isiOS()) {
+      // 2a. (iOS) Chirp(約200ms)が鳴り終わるのを待ってから
+      //     speakMessageのsuspend()に備える
+      await sleep(200); 
+    } else {
+      // 2b. (Non-iOS) 従来通りホワイトノイズを開始
+      startWhiteNoise();
+    }
   }
   
   // ★★★ 削除：ここでisNewCaseの処理をしない（メッセージ表示後に移動）★★★
@@ -2595,10 +2600,17 @@ async function runSystem() {
     await typeOut("", BASE_CPS, event, msg);
   }
   if (TTS_ENABLED) {
-    await stopWhiteNoise();
-    if (TTS_ENABLED) {
-      playChirp('end');
+    if (isiOS()) {
+      // 4a. (iOS) speakMessage内のaudioCtx.resume()が
+      //     完了するのを少し待つ
+      await sleep(50); 
+    } else {
+      // 4b. (Non-iOS) 従来通りホワイトノイズを停止
+      await stopWhiteNoise();
     }
+    
+    // 5. 最後にエンド音を鳴らす (iOSでも鳴らす)
+    playChirp('end');
   }
 
   // ★★★ 追加：メッセージ表示完了後に新規事案をCasePanelに表示 ★★★
