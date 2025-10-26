@@ -527,6 +527,11 @@ let tickTimer = null;
 let userScrolling = false;
 let scrollTimeout = null;
 
+let ttsAbort = false;
+let ttsTestTimer = null;
+
+
+
 // ==========================================
 // 設定の保存・復元、および関連処理
 // ==========================================
@@ -867,21 +872,30 @@ async function initTTS() {
 }
 // --- PATCH END (iOS TTS warmup) ---
 
-
 function toggleTTS() {
-  const wasEnabled = TTS_ENABLED; // 直前の状態を覚えておく
+  const wasEnabled = TTS_ENABLED;
   TTS_ENABLED = !TTS_ENABLED;
-  
+
+  // これがトグルOFFでの「もうしゃべらなくていい」フラグ
+  if (!TTS_ENABLED) {
+    ttsAbort = true;
+  }
+
   const btn1 = document.getElementById("ttsToggle");
   const btn2 = document.getElementById("ttsToggle2");
   const text = `音声: ${TTS_ENABLED ? "ON" : "OFF"}`;
   const className = TTS_ENABLED ? "btn active" : "btn";
 
-  btn1.textContent = text;
-  btn1.className = className;
-  btn2.textContent = text;
-  btn2.className = className;
+  if (btn1) {
+    btn1.textContent = text;
+    btn1.className = className;
+  }
+  if (btn2) {
+    btn2.textContent = text;
+    btn2.className = className;
+  }
 
+  // スライダー群の有効/無効
   const sliders = document.querySelectorAll('.rate-slider, #voiceSel');
   sliders.forEach(el => el.classList.toggle('disabled', !TTS_ENABLED));
 
@@ -893,13 +907,11 @@ function toggleTTS() {
     // OFFにしたとき
     stopTimeSignal();
     if ('speechSynthesis' in window) {
-      speechSynthesis.cancel();
+      try { speechSynthesis.cancel(); } catch {}
     }
-
-    // ⭐ここを追加：ホワイトノイズを止める
-    if (wasEnabled) {
-      // asyncだけど待たなくてOK。止めに行くだけ
-      stopWhiteNoise();
+    // ノイズ・送受信音を止めるハンドラがあれば呼ぶ
+    if (typeof stopWhiteNoise === 'function') {
+      try { stopWhiteNoise(); } catch {}
     }
   }
 
@@ -2326,22 +2338,21 @@ function loadVoices() {
 }
 loadVoices();
 
-// --- PATCH START (iOS-safe speakMessage) ---
 async function speakMessage(text, isTest = false) {
-  // iOS用のウォームアップは、呼び出し側で initTTS() を挟む想定だけど
-  // 念のためここでも起こしておく
-  await initTTS();
+  await initTTS(); // iOSならここでTTSをウォームアップ
 
   return new Promise(async (resolve, reject) => {
-    // 50msディレイで多少安定させる
+    // 少し待って安定させる
     setTimeout(async () => {
       if (!('speechSynthesis' in window)) {
         resolve();
         return;
       }
 
-      // iOSの "WebAudio再生中はTTSが無音になる" バグ対策
-      // しゃべってる間だけ AudioContext を一時停止する
+      // これからしゃべるので、これは「今の読み上げ＝アクティブ」
+      ttsAbort = false;
+
+      // iOSバグ回避：読み上げ中はWebAudioを止める
       let suspended = false;
       if (isiOS() && audioCtx && audioCtx.state === 'running') {
         try {
@@ -2350,26 +2361,30 @@ async function speakMessage(text, isTest = false) {
         } catch {}
       }
 
-      // masterGainがあればそこから取得、なければスライダー
       const masterVol = masterGain
         ? masterGain.gain.value
-        : parseFloat(document.getElementById("masterVolumeSlider").value);
+        : parseFloat(document.getElementById("masterVolumeSlider").value || "1");
 
       const utter = new SpeechSynthesisUtterance(text);
-
-      // voice/lang/rate/volume 設定
       utter.voice  = chosenVoice || null;
       utter.lang   = (chosenVoice && chosenVoice.lang) ? chosenVoice.lang : 'ja-JP';
-      utter.rate   = isiOS() ? Math.min(ttsRate, 1.2) : ttsRate; // iOSは速すぎると無音になることがある
+      utter.rate   = isiOS() ? Math.min(ttsRate, 1.2) : ttsRate;
       utter.pitch  = 1.0;
       utter.volume = (ttsVolume ?? 1.0) * masterVol;
 
-      // 完了/エラー時の後片付け
+      let didCleanup = false;
       const cleanup = async (ok = true, err = null) => {
-        // iOSではTTSと同時にSFX/ノイズを鳴らさないようにしているので、
-        // resume はここでまとめてやる
-        if (suspended && audioCtx && audioCtx.state === 'suspended') {
-          try { await audioCtx.resume(); } catch {}
+        if (didCleanup) return;   // ← 二重実行防止
+        didCleanup = true;
+
+        // トグルOFF等で「もう音いらない」状態なら、resumeすらやらなくていい
+        if (!TTS_ENABLED) {
+          // 読み上げ終わり直後にTTS切ったケースでは
+          // audioCtxは明示的にresumeしない（iOS側の安全策）
+        } else {
+          if (suspended && audioCtx && audioCtx.state === 'suspended') {
+            try { await audioCtx.resume(); } catch {}
+          }
         }
 
         if (ok) {
@@ -2384,8 +2399,8 @@ async function speakMessage(text, isTest = false) {
       };
 
       utter.onerror = (e) => {
-        // iOS Safariは cancel() 後に onerror('interrupted') を投げるのでそれは正常扱い
-        if (e.error === 'interrupted') {
+        // "interrupted" はcancel()による中断。ユーザーがOFFにしただけなので正常扱い
+        if (e.error === 'interrupted' || e.error === 'canceled' || e.error === 'cancellation') {
           cleanup(true);
         } else {
           console.error("SpeechSynthesisUtterance.onerror", e);
@@ -2393,9 +2408,8 @@ async function speakMessage(text, isTest = false) {
         }
       };
 
-      // Safari/iOS バグ：
-      // cancel() 直後に speak() 呼ぶと無音終了になることがあるので、
-      // まず古い発話を止めて、次フレームで speak()
+      // まず古い読み上げが残ってたら消す
+      // ただし iOS は cancel()→即speak() が無音になるので、1フレーム遅延してから speak
       try {
         if (speechSynthesis.speaking || speechSynthesis.pending) {
           speechSynthesis.cancel();
@@ -2403,6 +2417,12 @@ async function speakMessage(text, isTest = false) {
       } catch {}
 
       setTimeout(() => {
+        // OFFにされた後ならもう喋らない
+        if (ttsAbort || !TTS_ENABLED) {
+          cleanup(true);
+          return;
+        }
+
         try {
           speechSynthesis.speak(utter);
         } catch (err) {
@@ -2412,7 +2432,6 @@ async function speakMessage(text, isTest = false) {
     }, 50);
   });
 }
-// --- PATCH END (iOS-safe speakMessage) ---
 
 
 /// ==========================================
@@ -2742,11 +2761,22 @@ window.addEventListener('DOMContentLoaded', async () => {
     saveSettings();
   });
   ttsSlider.addEventListener('change', () => {
-    if ('speechSynthesis' in window) {
-      speechSynthesis.cancel();
-      speakMessage("音量テスト", true);
+    // いきなり喋らせず、最後の操作から少し落ち着いたら1回だけ喋る
+    if (ttsTestTimer) {
+      clearTimeout(ttsTestTimer);
     }
+    ttsTestTimer = setTimeout(async () => {
+      if ('speechSynthesis' in window && TTS_ENABLED) {
+        try {
+          // OFF中は喋らない、ONなら1回だけテスト
+          await speakMessage("音量テスト", true);
+        } catch (err) {
+          console.warn("TTS test speak failed:", err);
+        }
+      }
+    }, 200); // 200msくらいで十分
   });
+
 
   // ▼▼▼【ここに追加】ブラウザリロード時のTTSキャンセル ▼▼▼
   window.addEventListener('beforeunload', () => {
