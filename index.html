@@ -814,86 +814,133 @@ function isiOS() {
 // - その後で loadSettings() 相当の voice 選択ロジックをもう一度走らせて
 //   chosenVoice をちゃんと埋める
 async function initTTS() {
-  if (ttsReady || !('speechSynthesis' in window)) return;
+  if (!('speechSynthesis' in window)) return;
 
-  await new Promise((resolve) => {
-    const u = new SpeechSynthesisUtterance(' ');
-    u.volume = 0;
-    u.rate = 1;
-    u.onend = () => {
-      ttsReady = true;
+  const voiceSelect = document.getElementById('voiceSel');
+  if (!voiceSelect) return;
 
-      // Safariはここでやっと voices が返り始めることがあるので、
-      // いまの loadSettings() の voice 部分だけもう一度実行して chosenVoice を固める
-      (async () => {
-        const voiceSelect = document.getElementById('voiceSel');
-        if (!voiceSelect) {
-          resolve();
-          return;
-        }
+  // ---- iOS Safari 対策: 安定して voices を取得する関数 ----
+  async function getStableVoices() {
+    // 1. 今あるやつ
+    let voices = speechSynthesis.getVoices();
+    if (voices.length > 0) return voices;
 
-        // これは loadSettings() と同じロジックを再利用する
-        async function getStableVoices() {
-          let voices = speechSynthesis.getVoices();
-          if (voices.length > 0) return voices;
+    // 2. iOSの「まだロードしてない」対策: 無音でウォームアップ
+    await new Promise(res => {
+      try {
+        const warm = new SpeechSynthesisUtterance("　"); // 全角スペースほぼ無音
+        warm.volume = 0;
+        warm.rate = 1;
+        // 日本語音声を要求する。この指定がないと英語系だけ先に起きる。
+        warm.lang = 'ja';
+        warm.onend = res;
+        warm.onerror = res;
+        speechSynthesis.speak(warm);
+      } catch (_) {
+        res();
+      }
+    });
 
-          // fallback: もう一回だけ声を聞かせて刺激する
-          await new Promise(r2 => {
-            const u2 = new SpeechSynthesisUtterance(' ');
-            u2.volume = 0;
-            u2.rate = 1;
-            u2.onend = r2;
-            try { speechSynthesis.speak(u2); } catch { r2(); }
-          });
+    // 3. もう一回
+    voices = speechSynthesis.getVoices();
+    if (voices.length > 0) return voices;
 
-          voices = speechSynthesis.getVoices();
-          if (voices.length > 0) return voices;
+    // 4. voiceschanged またはタイムアウトで最終トライ
+    return await new Promise(resolve => {
+      let done = false;
+      function finish(vs) {
+        if (done) return;
+        done = true;
+        resolve(vs);
+      }
 
-          return voices; // ここではこれ以上は待たない（タップ中なのでブロックしない）
-        }
+      const vsNow = speechSynthesis.getVoices();
+      if (vsNow.length > 0) {
+        finish(vsNow);
+        return;
+      }
 
-        const voices = await getStableVoices();
-        if (voices && voices.length > 0) {
-          const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
-          const listForSelect = jaVoices.length > 0 ? jaVoices : voices;
+      window.addEventListener(
+        'voiceschanged',
+        () => finish(speechSynthesis.getVoices()),
+        { once: true }
+      );
 
-          // (B) セレクトを構築する。optionのvalueに「元のvoices配列のインデックス」を埋める
-          voiceSelect.innerHTML = listForSelect
-            .map(v => {
-              const realIndex = voices.indexOf(v); // ←これがズレ防止の肝
-              return `<option value="${realIndex}">${v.name} (${v.lang})</option>`;
-            })
-            .join('');
+      setTimeout(() => {
+        finish(speechSynthesis.getVoices());
+      }, 500);
+    });
+  }
 
-          // (C) chosenVoice を決める (jaVoices[0] を優先)
-          chosenVoice =
-            jaVoices[0] ||
-            voices[0] ||
-            null;
+  // ---- 実際の取得 ----
+  const voices = await getStableVoices();
+  if (!voices || voices.length === 0) {
+    console.warn('[TTS:initTTS] No voices available yet.');
+    return;
+  }
 
-          // UI上の選択状態を chosenVoice に合わせる
-          if (chosenVoice) {
-            const chosenRealIndex = voices.indexOf(chosenVoice);
-            if (chosenRealIndex >= 0) {
-              voiceSelect.value = String(chosenRealIndex);
-            }
-          }
-          console.log('[TTS:initTTS] chosenVoice:', chosenVoice);
-        }
-
-        resolve();
-      })();
-    };
-
-    try {
-      speechSynthesis.speak(u);
-    } catch {
-      // speak() が例外でも resolve だけは呼ぶ
-      resolve();
+  // すでに選ばれている voiceIndex を優先して保持したい
+  // (ユーザーが loadSettings 時点 or 直前に選んだもの)
+  let preservedIndex = null;
+  {
+    // 現在のセレクト状態を見ておく（initTTSが壊す前に）
+    const currentVal = parseInt(voiceSelect.value);
+    if (!isNaN(currentVal) && voices[currentVal]) {
+      preservedIndex = currentVal;
     }
-  });
+  }
+
+  // ---- セレクトボックスを正しく再構築する ----
+  // 日本語優先で並べたいが、value は "voices全体のindex" を必ず入れる
+  const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
+  const listForSelect = jaVoices.length > 0 ? jaVoices : voices;
+
+  voiceSelect.innerHTML = listForSelect
+    .map(v => {
+      const realIndex = voices.indexOf(v); // ←重要: 元配列のインデックスを保持
+      return `<option value="${realIndex}">${v.name} (${v.lang})</option>`;
+    })
+    .join('');
+
+  // ---- chosenVoice の扱い ----
+  // 1. もし preservedIndex（ユーザーが既に選んでる音声）がまだ有効なら、それを使い続ける
+  // 2. そうでなければ日本語voiceの先頭、なければ voices[0]
+  let newChosen = null;
+  if (preservedIndex !== null && voices[preservedIndex]) {
+    newChosen = voices[preservedIndex];
+  } else if (jaVoices.length > 0) {
+    newChosen = jaVoices[0];
+    preservedIndex = voices.indexOf(newChosen);
+  } else {
+    newChosen = voices[0];
+    preservedIndex = 0;
+  }
+
+  // ここでグローバル chosenVoice を更新する
+  chosenVoice = newChosen;
+
+  // セレクトUIのvalueを chosenVoice に合わせる
+  if (preservedIndex !== null) {
+    voiceSelect.value = String(preservedIndex);
+  }
+
+  console.log('[TTS:initTTS] chosenVoice:', chosenVoice);
+
+  // ---- 変更イベント: ユーザーが切り替えた時に chosenVoice を同期 ----
+  // 既に同じイベントを何度も付けないように、一旦古いハンドラを潰すなら
+  // voiceSelect.onchange = ... の単発バインドが安全
+  voiceSelect.onchange = () => {
+    const idx = parseInt(voiceSelect.value);
+    const all = speechSynthesis.getVoices();
+    if (!isNaN(idx) && all[idx]) {
+      chosenVoice = all[idx];
+      console.log('[TTS:initTTS] user changed voice:', chosenVoice);
+    }
+    // ユーザー選択を保存（voiceIndexとして）
+    saveSettings();
+  };
 }
-// --- PATCH END (iOS TTS warmup) ---
+
 
 function toggleTTS() {
   const wasEnabled = TTS_ENABLED;
