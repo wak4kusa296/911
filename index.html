@@ -929,7 +929,7 @@ async function initTTS() {
   initializedTTSForApple = true;
 }
 
-function toggleTTS() {
+async function toggleTTS() {
   const wasEnabled = TTS_ENABLED;
   TTS_ENABLED = !TTS_ENABLED;
 
@@ -958,8 +958,8 @@ function toggleTTS() {
 
   if (TTS_ENABLED) {
     // ONにしたとき
-    ensureAudio();
-    startTimeSignal();
+    await ensureAudio();
+    await startTimeSignal();
   } else {
     // OFFにしたとき
     stopTimeSignal();
@@ -1998,7 +1998,7 @@ async function typeOut(seed, cpsBase, ev, msgEl) {
 // 音声関連
 // ==========================================
 
-function ensureAudio() {
+async function ensureAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -2026,7 +2026,7 @@ function ensureAudio() {
   }
 
   if (audioCtx.state === "suspended") {
-    audioCtx.resume();
+    await audioCtx.resume();
   }
 }
 
@@ -2172,9 +2172,9 @@ function toneNTT(kind) {
   osc.stop(t0 + (p.dur / 1000) + p.rel + 0.05);
 }
 // ▼▼▼【変更】引数にshowOverlayを追加 ▼▼▼
-function playEmergencyBeep(durationMs, showOverlay = true) {
+async function playEmergencyBeep(durationMs, showOverlay = true) {
   if (!TTS_ENABLED || !audioCtx) return Promise.resolve();
-  ensureAudio();
+  await ensureAudio();
 
   // ▼▼▼【変更】showOverlayがtrueの時のみ警告画面を表示 ▼▼▼
   const overlay = document.getElementById('emergency-overlay');
@@ -2222,10 +2222,10 @@ function playEmergencyBeep(durationMs, showOverlay = true) {
     };
   });
 }
-function startTimeSignal() {
+async function startTimeSignal() {
   if (tickTimer) clearTimeout(tickTimer);
   if (!TTS_ENABLED) return;
-  ensureAudio();
+  await ensureAudio();
 
   const tick = () => {
     if (!TTS_ENABLED) { 
@@ -2539,7 +2539,7 @@ async function runSystem() {
       await sleep(500);
   }
   if (TTS_ENABLED) {
-    ensureAudio();
+    await ensureAudio();
     playChirp('start');
     startWhiteNoise();
   }
@@ -2704,14 +2704,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const specialAlertModeBtn = document.getElementById("specialAlertModeToggle");
   if (specialAlertModeBtn) {
-    specialAlertModeBtn.addEventListener("click", () => {
+    specialAlertModeBtn.addEventListener("click", async () => {
       isSpecialAlertMode = !isSpecialAlertMode;
       specialAlertModeBtn.textContent = `ドラマチックモード: ${isSpecialAlertMode ? "ON" : "OFF"}`;
       specialAlertModeBtn.classList.toggle("active", isSpecialAlertMode);
       saveSettings();
       if (TTS_ENABLED) {
-        ensureAudio();
-        if (isSpecialAlertMode) { playEmergencyBeep(400, false); }
+        await ensureAudio();
+        if (isSpecialAlertMode) { await playEmergencyBeep(400, false); }
         else { playChirp('end'); }
       }
     });
@@ -2762,9 +2762,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     saveSettings();
   });
-  sfxSlider.addEventListener('change', () => {
-    ensureAudio();
-    playEmergencyBeep(1000, false);
+  sfxSlider.addEventListener('change', async () => {
+    await ensureAudio();
+    await playEmergencyBeep(1000, false);
   });
 
   const timeSigSlider = document.getElementById("timeSigVolumeSlider");
@@ -2776,9 +2776,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     saveSettings();
   });
-  timeSigSlider.addEventListener('change', () => {
+  timeSigSlider.addEventListener('change', async () => {
     // TTSがONのときだけ、"ピッ" を1回鳴らして確認できるようにする
-    ensureAudio();
+    await ensureAudio();
     toneNTT('pip');
   });
 
