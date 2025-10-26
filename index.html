@@ -816,50 +816,35 @@ function isiOS() {
 let initializedTTSForApple = false; // ← 追加: 何度も上書きしないためのフラグ
 
 async function initTTS() {
-  // すでに初期化済みなら何もしない（多重初期化で設定が壊れるのを防ぐ）
-  if (initializedTTSForApple) {
-    return;
-  }
-
-  if (!('speechSynthesis' in window)) {
-    initializedTTSForApple = true;
-    return;
-  }
+  if (!('speechSynthesis' in window)) return;
 
   const voiceSelect = document.getElementById('voiceSel');
-  if (!voiceSelect) {
-    initializedTTSForApple = true;
-    return;
-  }
+  // voiceSelect がそもそもないなら何もしない
+  if (!voiceSelect) return;
 
-  // ---- iOSウォームアップ: ja音声エンジンを起こす ----
-  async function warmupJapaneseVoice() {
-    return new Promise(res => {
-      try {
-        const dummy = new SpeechSynthesisUtterance("　"); // 全角スペースなど
-        dummy.volume = 0;
-        dummy.rate = 1;
-        dummy.lang = 'ja'; // ← "ja-JP"より"ja"のほうがiOS安定
-        dummy.onend = res;
-        dummy.onerror = res;
-        speechSynthesis.speak(dummy);
-      } catch (_) {
-        res();
-      }
-    });
-  }
-
-  // ---- voicesを安定して取得するヘルパー ----
+  // iOS用: voices を安定的に取得
   async function getStableVoices() {
     let voices = speechSynthesis.getVoices();
     if (voices.length > 0) return voices;
 
-    // まだ空ならウォームアップしてから再取得
-    await warmupJapaneseVoice();
+    // iOSウォームアップ（日本語要求）
+    await new Promise(res => {
+      try {
+        const warm = new SpeechSynthesisUtterance("　"); // 無音
+        warm.volume = 0;
+        warm.rate = 1;
+        warm.lang = 'ja';
+        warm.onend = res;
+        warm.onerror = res;
+        speechSynthesis.speak(warm);
+      } catch (_) {
+        res();
+      }
+    });
+
     voices = speechSynthesis.getVoices();
     if (voices.length > 0) return voices;
 
-    // それでも空なら voiceschanged を短時間だけ待つ
     return await new Promise(resolve => {
       let done = false;
       function finish(vs) {
@@ -886,48 +871,48 @@ async function initTTS() {
     });
   }
 
-  // ---- 実際に声を取得してUIを正しく組み立てる ----
   const voices = await getStableVoices();
-
   if (!voices || voices.length === 0) {
     console.warn('[TTS:initTTS] no voices yet');
-    chosenVoice = null;
-    initializedTTSForApple = true;
     return;
   }
 
-  // 日本語優先
-  const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
-  const listForSelect = jaVoices.length > 0 ? jaVoices : voices;
+  // ここが超重要：
+  // UI(<select>)の value は "voices 全体のインデックス" になってる前提（= loadSettings()がそうしてる）
+  // その値を信じて chosenVoice を決めるだけ。UI自体は上書きしない。
+  const idxFromUI = parseInt(voiceSelect.value);
+  if (!isNaN(idxFromUI) && voices[idxFromUI]) {
+    chosenVoice = voices[idxFromUI];
+  } else {
+    // UIがまだ何も選んでない/不正なら、日本語優先で決める
+    chosenVoice =
+      voices.find(v => /^ja/i.test(v.lang)) ||
+      voices[0] ||
+      null;
 
-  // セレクトを再構築する。
-  // ここが重大ポイント：valueは "voices 全体でのインデックス"
-  voiceSelect.innerHTML = listForSelect
-    .map(v => {
-      const realIndex = voices.indexOf(v); // ← これをvalueに使う
-      return `<option value="${realIndex}">${v.name} (${v.lang})</option>`;
-    })
-    .join('');
-
-  // chosenVoiceを決定（日本語を最優先）
-  chosenVoice =
-    jaVoices[0] ||
-    voices[0] ||
-    null;
-
-  // voiceSelectのvalueを chosenVoice に揃える
-  if (chosenVoice) {
-    const chosenRealIndex = voices.indexOf(chosenVoice);
-    if (chosenRealIndex >= 0) {
-      voiceSelect.value = String(chosenRealIndex);
+    // UI側にも、そのchosenVoiceのインデックスを反映する（ここだけはOK）
+    if (chosenVoice) {
+      const realIndex = voices.indexOf(chosenVoice);
+      if (realIndex >= 0) {
+        voiceSelect.value = String(realIndex);
+      }
     }
   }
 
   console.log('[TTS:initTTS] chosenVoice:', chosenVoice);
 
-  initializedTTSForApple = true;
+  // onchangeでユーザーの変更を拾って chosenVoice を更新。
+  // 何回も addEventListener されて多重実行しないように onChange 1本化。
+  voiceSelect.onchange = () => {
+    const all = speechSynthesis.getVoices();
+    const newIdx = parseInt(voiceSelect.value);
+    if (!isNaN(newIdx) && all[newIdx]) {
+      chosenVoice = all[newIdx];
+      console.log('[TTS:initTTS] user changed voice:', chosenVoice);
+    }
+    saveSettings();
+  };
 }
-
 
 function toggleTTS() {
   const wasEnabled = TTS_ENABLED;
@@ -2397,97 +2382,102 @@ loadVoices();
 
 async function speakMessage(text, isTest = false) {
   return new Promise((resolve) => {
-    // 少し待ってから処理（元の構造維持）
-    setTimeout(() => {
+    setTimeout(async () => {
       if (!('speechSynthesis' in window)) {
         resolve();
         return;
       }
 
-      // 1. UIの現在値で毎回最新状態を確定させる
-      // rate
+      // 1. UIから最新の値を毎回確定させる
       const rateSliderEl = document.getElementById("rateSlider");
+      const ttsVolumeSliderEl = document.getElementById("ttsVolumeSlider");
+      const masterSliderEl = document.getElementById("masterVolumeSlider");
+      const voiceSelectEl = document.getElementById("voiceSel");
+
+      // rate
+      let effectiveRate = ttsRate;
       if (rateSliderEl) {
         const r = parseFloat(rateSliderEl.value);
-        if (!isNaN(r)) ttsRate = r;
+        if (!isNaN(r)) effectiveRate = r;
       }
 
-      // TTSボリューム
-      const ttsVolumeSliderEl = document.getElementById("ttsVolumeSlider");
+      // ttsVolume (個別ボリューム)
+      let effectiveTtsVol = ttsVolume;
       if (ttsVolumeSliderEl) {
         const tv = parseFloat(ttsVolumeSliderEl.value);
-        if (!isNaN(tv)) ttsVolume = tv;
+        if (!isNaN(tv)) effectiveTtsVol = tv;
       }
 
-      // masterVolume
-      let masterVol = 1.0;
+      // masterVolume (マスター)
+      let effectiveMasterVol = 1.0;
       if (typeof masterGain !== "undefined" && masterGain) {
-        masterVol = masterGain.gain.value;
-      } else {
-        const mvEl = document.getElementById("masterVolumeSlider");
-        if (mvEl) {
-          const mv = parseFloat(mvEl.value);
-          if (!isNaN(mv)) masterVol = mv;
-        }
+        effectiveMasterVol = masterGain.gain.value;
+      } else if (masterSliderEl) {
+        const mv = parseFloat(masterSliderEl.value);
+        if (!isNaN(mv)) effectiveMasterVol = mv;
       }
 
-      // voice選択（ここがiOSの外国語読み対策）
-      const voiceSelectEl = document.getElementById("voiceSel");
+      // voice (UI上で選択されているindexから取り直し)
+      const allVoices = speechSynthesis.getVoices();
+      let effectiveVoice = chosenVoice; // fallback
+
       if (voiceSelectEl) {
-        const allVoices = speechSynthesis.getVoices();
         const idx = parseInt(voiceSelectEl.value);
-
         if (!isNaN(idx) && allVoices[idx]) {
-          chosenVoice = allVoices[idx];
-        } else {
-          chosenVoice =
-            chosenVoice ||
-            allVoices.find(v => /^ja/i.test(v.lang)) ||
-            allVoices[0] ||
-            null;
-        }
-      } else {
-        // voiceSelそのものがない場合のフォールバック
-        const allVoices = speechSynthesis.getVoices();
-        if (!chosenVoice && allVoices.length > 0) {
-          chosenVoice =
-            allVoices.find(v => /^ja/i.test(v.lang)) ||
-            allVoices[0] ||
-            null;
+          effectiveVoice = allVoices[idx];
         }
       }
 
-      // 2. 発話オブジェクト作成
+      // iOS用フォールバック: 日本語優先で探す
+      if (!effectiveVoice) {
+        effectiveVoice =
+          allVoices.find(v => /^ja/i.test(v.lang)) ||
+          allVoices[0] ||
+          null;
+      }
+
+      // 2. 日本語voiceを確保できてるか？
+      const isJa = !!(effectiveVoice && effectiveVoice.lang && /^ja/i.test(effectiveVoice.lang));
+
+      if (!isJa) {
+        // まだ日本語voiceが起きてない場合。
+        // iOSだとここで英語/ロシア語っぽい音に落ちるので、あえて読み上げしない。
+        console.warn("[TTS] No Japanese voice active yet; skip speak() to avoid wrong language.");
+        resolve();
+        return;
+      }
+
+      // chosenVoice を今使った voice で同期し直しておく（次回以降のfallback安定用）
+      chosenVoice = effectiveVoice;
+
+      // 3. Utterance生成
       const utter = new SpeechSynthesisUtterance(text);
 
-      // iOSはvoiceが不正参照だと無視されて英語固定になったりする。
-      // 常に「いまの chosenVoice か null」に限定する。
-      utter.voice = chosenVoice || null;
+      // ここが言語と声の最終決定
+      utter.voice = effectiveVoice || null;
+      // iOSでは 'ja' のほうが安定する
+      utter.lang = 'ja';
 
-      utter.rate = ttsRate;
-      utter.volume = ttsVolume * masterVol;
+      utter.rate   = effectiveRate;
+      utter.volume = effectiveTtsVol * effectiveMasterVol;
 
-      // 3. コールバック
+      // 4. iOSの「割り込み=onerror」問題は resolve 扱い
       utter.onend = () => {
         resolve();
       };
-
       utter.onerror = (e) => {
-        // iOS Safari はユーザーの割り込み/キャンセルでも onerror に来る。
-        // その場合は rejectしたくない（シナリオ止めたくない）ので resolve 扱いにする。
         console.warn("SpeechSynthesisUtterance.onerror (treated as resolve)", e);
         resolve();
       };
 
-      // 4. Safari安定化のために僅かな遅延を入れて speak()
+      // 5. Safari安定用の少しの遅延
       setTimeout(() => {
-        // 再生を開始
         speechSynthesis.speak(utter);
       }, 50);
-
     }, 50);
   });
 }
+
 
 /// ==========================================
 // メインループ
