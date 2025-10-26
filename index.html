@@ -684,7 +684,7 @@ async function loadSettings() {
     // =========================
     // 5. TTS音声 (iOS / Safari 対応・状態保持対応)
     // =========================
-    const voiceSelEl = document.getElementById("voiceSel");
+    /*const voiceSelEl = document.getElementById("voiceSel");
 
     if (voiceSelEl && 'speechSynthesis' in window) {
 
@@ -792,7 +792,7 @@ async function loadSettings() {
         saveSettings();
       });
     }
-
+*/
   } catch (e) {
     console.error("設定の読み込みに失敗しました:", e);
     localStorage.removeItem(SETTINGS_KEY);
@@ -817,34 +817,32 @@ let initializedTTSForApple = false; // ← 追加: 何度も上書きしない�
 
 async function initTTS() {
   if (!('speechSynthesis' in window)) return;
+  
+  // 既に初期化済みなら何もしない
+  if (initializedTTSForApple) return;
 
   const voiceSelect = document.getElementById('voiceSel');
-  // voiceSelect がそもそもないなら何もしない
   if (!voiceSelect) return;
 
-  // iOS用: voices を安定的に取得
+  // 1. iOS/Safari用のウォームアップと安定したボイスリスト取得
   async function getStableVoices() {
     let voices = speechSynthesis.getVoices();
     if (voices.length > 0) return voices;
 
-    // iOSウォームアップ（日本語要求）
+    // 無音発話でエンジンを起動
     await new Promise(res => {
       try {
         const warm = new SpeechSynthesisUtterance("　"); // 無音
-        warm.volume = 0;
-        warm.rate = 1;
-        warm.lang = 'ja';
-        warm.onend = res;
-        warm.onerror = res;
+        warm.volume = 0; warm.rate = 1; warm.lang = 'ja';
+        warm.onend = res; warm.onerror = res;
         speechSynthesis.speak(warm);
-      } catch (_) {
-        res();
-      }
+      } catch (_) { res(); }
     });
 
     voices = speechSynthesis.getVoices();
     if (voices.length > 0) return voices;
 
+    // 最終手段: voiceschanged イベントを待つ
     return await new Promise(resolve => {
       let done = false;
       function finish(vs) {
@@ -852,22 +850,10 @@ async function initTTS() {
         done = true;
         resolve(vs);
       }
-
       const vsNow = speechSynthesis.getVoices();
-      if (vsNow.length > 0) {
-        finish(vsNow);
-        return;
-      }
-
-      window.addEventListener(
-        'voiceschanged',
-        () => finish(speechSynthesis.getVoices()),
-        { once: true }
-      );
-
-      setTimeout(() => {
-        finish(speechSynthesis.getVoices());
-      }, 500);
+      if (vsNow.length > 0) { finish(vsNow); return; }
+      window.addEventListener('voiceschanged', () => finish(speechSynthesis.getVoices()), { once: true });
+      setTimeout(() => { finish(speechSynthesis.getVoices()); }, 500);
     });
   }
 
@@ -876,42 +862,71 @@ async function initTTS() {
     console.warn('[TTS:initTTS] no voices yet');
     return;
   }
+  
+  // 2. <select>（ドロップダウン）を構築
+  const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
+  const listForSelect = jaVoices.length > 0 ? jaVoices : voices;
 
-  // ここが超重要：
-  // UI(<select>)の value は "voices 全体のインデックス" になってる前提（= loadSettings()がそうしてる）
-  // その値を信じて chosenVoice を決めるだけ。UI自体は上書きしない。
-  const idxFromUI = parseInt(voiceSelect.value);
-  if (!isNaN(idxFromUI) && voices[idxFromUI]) {
-    chosenVoice = voices[idxFromUI];
-  } else {
-    // UIがまだ何も選んでない/不正なら、日本語優先で決める
-    chosenVoice =
-      voices.find(v => /^ja/i.test(v.lang)) ||
-      voices[0] ||
-      null;
+  // HTMLにある <option value=""> はクリアして再構築
+  voiceSelect.innerHTML = '<option value="">音声自動選択</option>';
+  listForSelect.forEach(v => {
+      const realIndex = voices.indexOf(v); // 元の配列でのインデックス
+      const opt = document.createElement('option');
+      opt.value = String(realIndex);
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSelect.appendChild(opt);
+  });
 
-    // UI側にも、そのchosenVoiceのインデックスを反映する（ここだけはOK）
-    if (chosenVoice) {
-      const realIndex = voices.indexOf(chosenVoice);
-      if (realIndex >= 0) {
-        voiceSelect.value = String(realIndex);
-      }
+  // 3. 保存された設定(localStorage)を読み込む
+  const savedSettings = localStorage.getItem(SETTINGS_KEY);
+  let savedVoiceIndex = NaN;
+  if (savedSettings) {
+      try {
+          const settings = JSON.parse(savedSettings);
+          if (settings.voiceIndex !== undefined) {
+              savedVoiceIndex = parseInt(settings.voiceIndex);
+          }
+      } catch (e) { console.error("Failed to parse settings for voiceIndex", e); }
+  }
+  
+  // 4. 復元したIndexを元に グローバル変数 `chosenVoice` を決める
+  let candidate = null;
+  if (!isNaN(savedVoiceIndex) && voices[savedVoiceIndex]) {
+      candidate = voices[savedVoiceIndex];
+  }
+
+  chosenVoice =
+    candidate ||      // 1. 保存された声
+    jaVoices[0] ||    // 2. 日本語のデフォルト
+    voices[0] ||      // 3. 全体のデフォルト
+    null;
+
+  // 5. UI（ドロップダウン）の選択状態を `chosenVoice` に合わせる
+  if (chosenVoice) {
+    const chosenRealIndex = voices.indexOf(chosenVoice);
+    if (chosenRealIndex >= 0) {
+      voiceSelect.value = String(chosenRealIndex);
     }
   }
 
-  console.log('[TTS:initTTS] chosenVoice:', chosenVoice);
+  console.log('[TTS:initTTS] Voices initialized and chosenVoice set:', chosenVoice);
 
-  // onchangeでユーザーの変更を拾って chosenVoice を更新。
-  // 何回も addEventListener されて多重実行しないように onChange 1本化。
+  // 6. 唯一の onchange ハンドラを設定 (ユーザーが変更したら保存)
   voiceSelect.onchange = () => {
     const all = speechSynthesis.getVoices();
     const newIdx = parseInt(voiceSelect.value);
     if (!isNaN(newIdx) && all[newIdx]) {
       chosenVoice = all[newIdx];
-      console.log('[TTS:initTTS] user changed voice:', chosenVoice);
+    } else {
+      // 「音声自動選択」が選ばれたら、ja優先に戻す
+      chosenVoice = all.find(v => /^ja/i.test(v.lang)) || all[0] || null;
     }
+    console.log('[TTS] user changed voice:', chosenVoice);
     saveSettings();
   };
+  
+  // 7. 初期化完了フラグを立てる (二度と実行しないように)
+  initializedTTSForApple = true;
 }
 
 function toggleTTS() {
@@ -965,6 +980,7 @@ function toggleTTS() {
  * 音声ON/OFFボタン（2つ）のイベントリスナー
  */
 // --- PATCH START (iOS-friendly button handlers) ---
+
 
 document.getElementById("ttsToggle").addEventListener("click", async () => {
   await initTTS();        // iOSはユーザー操作の中でTTSエンジンを起こす
@@ -2361,7 +2377,7 @@ function stopTimeSignal() {
 // 音声合成（TTS）
 // ==========================================
 
-function loadVoices() {
+/*function loadVoices() {
   if (!('speechSynthesis' in window)) return;
   const load = () => {
     const vs = speechSynthesis.getVoices();
@@ -2378,7 +2394,7 @@ function loadVoices() {
   load();
   speechSynthesis.onvoiceschanged = load;
 }
-loadVoices();
+loadVoices();*/
 
 async function speakMessage(text, isTest = false) {
   return new Promise((resolve) => {
@@ -2477,7 +2493,6 @@ async function speakMessage(text, isTest = false) {
     }, 50);
   });
 }
-
 
 /// ==========================================
 // メインループ
