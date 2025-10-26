@@ -2374,134 +2374,104 @@ function stopTimeSignal() {
   });
 })();
 
-// ▼▼▼【変更】iOSのバグ回避ロジック（suspend, rate limit, setTimeout）を全て適用 ▼▼▼
-async function speakMessage(text) {
-  // 1. 即座に Promise を返す
-  return new Promise(async (resolve) => { // ★ async (resolve) に変更
-    if (!('speechSynthesis' in window)) {
-      console.warn("[TTS] speechSynthesis not supported.");
-      resolve();
-      return;
-    }
+async function speakMessage(text, isTest = false) {
+  return new Promise((resolve) => {
+    setTimeout(async () => {
+      if (!('speechSynthesis' in window)) {
+        resolve();
+        return;
+      }
 
-    // ★★★【追加】iOSオーディオ競合対策 (Patch 2 Logic A) ★★★
-    // TTS再生中、WebAudio(効果音/ノイズ)を一時停止する
-    let suspended = false;
-    if (isiOS() && audioCtx && audioCtx.state === 'running') {
-        try {
-            await audioCtx.suspend();
-            suspended = true;
-        } catch (e) {
-            console.warn('audioCtx.suspend() failed', e);
-        }
-    }
-    // ★★★【追加】ここまで ★★★
+      // 1. UIから最新の値を毎回確定させる
+      const rateSliderEl = document.getElementById("rateSlider");
+      const ttsVolumeSliderEl = document.getElementById("ttsVolumeSlider");
+      const masterSliderEl = document.getElementById("masterVolumeSlider");
+      const voiceSelectEl = document.getElementById("voiceSel");
 
-    // 2. UIから最新の値を「同期的」に取得
-    const rateSliderEl = document.getElementById("rateSlider");
-    const ttsVolumeSliderEl = document.getElementById("ttsVolumeSlider");
-    const masterSliderEl = document.getElementById("masterVolumeSlider");
-    const voiceSelectEl = document.getElementById("voiceSel");
+      // rate
+      let effectiveRate = ttsRate;
+      if (rateSliderEl) {
+        const r = parseFloat(rateSliderEl.value);
+        if (!isNaN(r)) effectiveRate = r;
+      }
 
-    let effectiveRate = ttsRate;
-    if (rateSliderEl) {
-      const r = parseFloat(rateSliderEl.value);
-      if (!isNaN(r)) effectiveRate = r;
-    }
+      // ttsVolume (個別ボリューム)
+      let effectiveTtsVol = ttsVolume;
+      if (ttsVolumeSliderEl) {
+        const tv = parseFloat(ttsVolumeSliderEl.value);
+        if (!isNaN(tv)) effectiveTtsVol = tv;
+      }
 
-    let effectiveTtsVol = ttsVolume;
-    if (ttsVolumeSliderEl) {
-      const tv = parseFloat(ttsVolumeSliderEl.value);
-      if (!isNaN(tv)) effectiveTtsVol = tv;
-    }
+      // masterVolume (マスター)
+      let effectiveMasterVol = 1.0;
+      if (typeof masterGain !== "undefined" && masterGain) {
+        effectiveMasterVol = masterGain.gain.value;
+      } else if (masterSliderEl) {
+        const mv = parseFloat(masterSliderEl.value);
+        if (!isNaN(mv)) effectiveMasterVol = mv;
+      }
 
-    let effectiveMasterVol = 1.0;
-    if (typeof masterGain !== "undefined" && masterGain) {
-      effectiveMasterVol = masterGain.gain.value;
-    } else if (masterSliderEl) {
-      const mv = parseFloat(masterSliderEl.value);
-      if (!isNaN(mv)) effectiveMasterVol = mv;
-    }
+      // voice (UI上で選択されているindexから取り直し)
+      const allVoices = speechSynthesis.getVoices();
+      let effectiveVoice = chosenVoice; // fallback
 
-    const allVoices = speechSynthesis.getVoices();
-    let effectiveVoice = chosenVoice; 
-
-    // 3. ボイスの選択ロジック (省略)
-    if (voiceSelectEl && allVoices.length > 0) {
-      const idx = parseInt(voiceSelectEl.value);
-      if (!isNaN(idx) && allVoices[idx]) {
-        effectiveVoice = allVoices[idx];
-      } else {
-        if (!effectiveVoice) {
-            effectiveVoice = allVoices.find(v => /^ja/i.test(v.lang)) || allVoices[0] || null;
+      if (voiceSelectEl) {
+        const idx = parseInt(voiceSelectEl.value);
+        if (!isNaN(idx) && allVoices[idx]) {
+          effectiveVoice = allVoices[idx];
         }
       }
-    } else if (!effectiveVoice && allVoices.length > 0) {
-        effectiveVoice = allVoices.find(v => /^ja/i.test(v.lang)) || allVoices[0] || null;
-    }
-    
-    // 4. 日本語ボイスが確保できているか最終確認
-    // (※全言語対応のため、このチェックを緩和)
-    if (!effectiveVoice) {
-        console.warn("[TTS] No valid voice found. Skipping speak().", effectiveVoice);
-        resolve(); // resolveは呼ぶ
-        return;
-    }
 
-    // 5. Utteranceを生成
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.voice = effectiveVoice;
-    // utter.lang = 'ja'; // voiceオブジェクトに追従させるためコメントアウト
-    utter.lang  = (effectiveVoice?.lang) || 'ja-JP';
+      // iOS用フォールバック: 日本語優先で探す
+      if (!effectiveVoice) {
+        effectiveVoice =
+          allVoices.find(v => /^ja/i.test(v.lang)) ||
+          allVoices[0] ||
+          null;
+      }
 
-    // ★★★【変更】iOSレート制限 (Patch 2 Logic C) ★★★
-    utter.rate   = isiOS() ? Math.min(effectiveRate, 1.2) : effectiveRate;
-    utter.volume = effectiveTtsVol * effectiveMasterVol;
-    
-    chosenVoice = effectiveVoice;
+      // 2. 日本語voiceを確保できてるか？
+      const isJa = !!(effectiveVoice && effectiveVoice.lang && /^ja/i.test(effectiveVoice.lang));
 
-    // 6. イベントハンドラ
-    const cleanup = async () => {
-        // ★★★【追加】iOSオーディオ競合対策 (Patch 2 Logic A) ★★★
-        // 一時停止していたWebAudioを再開
-        if (suspended && audioCtx?.state === 'suspended') {
-            try { await audioCtx.resume(); } catch {}
-        }
-        // ★★★【追加】ここまで ★★★
+      if (!isJa) {
+        // まだ日本語voiceが起きてない場合。
+        // iOSだとここで英語/ロシア語っぽい音に落ちるので、あえて読み上げしない。
+        console.warn("[TTS] No Japanese voice active yet; skip speak() to avoid wrong language.");
         resolve();
-    };
-    
-    utter.onend = cleanup;
-    utter.onerror = (e) => {
-      console.warn("SpeechSynthesisUtterance.onerror (treated as resolve)", e.error);
-      cleanup(); // onerrorでもcleanupを呼んでaudioCtx.resume()を保証
-    };
+        return;
+      }
 
-    // 7. 実行
-    try {
-        // 直前の発話が残っていると speak() が失敗/無音になるため、必ず止める
-        if(speechSynthesis.speaking || speechSynthesis.pending){
-            speechSynthesis.cancel();
-        }
-    } catch (e) {
-        console.warn('speechSynthesis.cancel() failed', e);
-    }
+      // chosenVoice を今使った voice で同期し直しておく（次回以降のfallback安定用）
+      chosenVoice = effectiveVoice;
 
-    // ★★★【変更】iOSのcancel/speakバグ回避 (Patch 2 Logic D) ★★★
-    // cancel() の直後に speak() を呼ぶとiOSで無視されるため、
-    // 0ms遅延させて次のフレームで実行する
-    setTimeout(() => {
-        try {
-            speechSynthesis.speak(utter);
-        } catch (e) {
-            console.error("[TTS] speech.speak() failed:", e);
-            cleanup(); // speak自体が即時失敗した場合もcleanup
-        }
-    }, 0); // 0msの遅延が必須
-    
+      // 3. Utterance生成
+      const utter = new SpeechSynthesisUtterance(text);
+
+      // ここが言語と声の最終決定
+      utter.voice = effectiveVoice || null;
+      // iOSでは 'ja' のほうが安定する
+      utter.lang = 'ja';
+
+      utter.rate   = effectiveRate;
+      utter.volume = effectiveTtsVol * effectiveMasterVol;
+
+      // 4. iOSの「割り込み=onerror」問題は resolve 扱い
+      utter.onend = () => {
+        resolve();
+      };
+      utter.onerror = (e) => {
+        console.warn("SpeechSynthesisUtterance.onerror (treated as resolve)", e);
+        resolve();
+      };
+
+      // 5. Safari安定用の少しの遅延
+      setTimeout(() => {
+        speechSynthesis.speak(utter);
+      }, 50);
+    }, 50);
   });
 }
-// ▲▲▲【変更】speakMessageの修正ここまで ▲▲▲
+
 /// ==========================================
 // メインループ
 // ==========================================
@@ -2570,18 +2540,8 @@ async function runSystem() {
   }
   if (TTS_ENABLED) {
     ensureAudio();
-    
-    // 1. まずスタート音を鳴らす (iOSでも鳴らす)
-    playChirp('start'); 
-
-    if (isiOS()) {
-      // 2a. (iOS) Chirp(約200ms)が鳴り終わるのを待ってから
-      //     speakMessageのsuspend()に備える
-      await sleep(200); 
-    } else {
-      // 2b. (Non-iOS) 従来通りホワイトノイズを開始
-      startWhiteNoise();
-    }
+    playChirp('start');
+    startWhiteNoise();
   }
   
   // ★★★ 削除：ここでisNewCaseの処理をしない（メッセージ表示後に移動）★★★
@@ -2600,17 +2560,10 @@ async function runSystem() {
     await typeOut("", BASE_CPS, event, msg);
   }
   if (TTS_ENABLED) {
-    if (isiOS()) {
-      // 4a. (iOS) speakMessage内のaudioCtx.resume()が
-      //     完了するのを少し待つ
-      await sleep(50); 
-    } else {
-      // 4b. (Non-iOS) 従来通りホワイトノイズを停止
-      await stopWhiteNoise();
+    await stopWhiteNoise();
+    if (TTS_ENABLED) {
+      playChirp('end');
     }
-    
-    // 5. 最後にエンド音を鳴らす (iOSでも鳴らす)
-    playChirp('end');
   }
 
   // ★★★ 追加：メッセージ表示完了後に新規事案をCasePanelに表示 ★★★
