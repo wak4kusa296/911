@@ -509,6 +509,10 @@
 let ttsVolume = 1.0; // TTS音量だけは別で保持
 let isSpecialAlertMode = false; // ▼▼▼【追加】ドラマチックモードモードの状態管理フラグ
 
+// TTSの有効状態（最初はOFF）
+let isTTSEnabled = false; 
+let isAudioUnlocked = false;
+
 const BASE_CPS = 12;
 let commanderName = "本部";
 let whiteNoiseNode = null;
@@ -697,51 +701,56 @@ function loadSettings() {
   }
 }
 
-
 function toggleTTS() {
-  const wasEnabled = TTS_ENABLED; // 直前の状態を覚えておく
-  TTS_ENABLED = !TTS_ENABLED;
   
-  const btn1 = document.getElementById("ttsToggle");
-  const btn2 = document.getElementById("ttsToggle2");
-  const text = `音声: ${TTS_ENABLED ? "ON" : "OFF"}`;
-  const className = TTS_ENABLED ? "btn active" : "btn";
+  // --- (1) iOS/iPadのオーディオ「アンロック」処理 ---
+  // ユーザーによる最初の「ON」操作時（!isTTSEnabled）に、
+  // 空の音声を再生してロックを解除します。
+  if (!isAudioUnlocked && !isTTSEnabled && 'speechSynthesis' in window) {
+    try {
+      console.log('[Audio] ユーザー操作によりオーディオコンテキストのアンロックを試みます...');
+      
+      // 空白（無音）の発話を同期的に実行することがトリガーとなります
+      const unlockUtterance = new SpeechSynthesisUtterance(" ");
+      unlockUtterance.volume = 0; // 念のため無音
+      speechSynthesis.speak(unlockUtterance);
+      
+      isAudioUnlocked = true;
+      console.log('[Audio] オーディオコンテキストは正常にアンロックされました。');
 
-  btn1.textContent = text;
-  btn1.className = className;
-  btn2.textContent = text;
-  btn2.className = className;
-
-  const sliders = document.querySelectorAll('.rate-slider, #voiceSel');
-  sliders.forEach(el => el.classList.toggle('disabled', !TTS_ENABLED));
-
-  if (TTS_ENABLED) {
-    // ONにしたとき
-    ensureAudio();
-    startTimeSignal();
-  } else {
-    // OFFにしたとき
-    stopTimeSignal();
-    if ('speechSynthesis' in window) {
-      speechSynthesis.cancel();
-    }
-
-    // ⭐ここを追加：ホワイトノイズを止める
-    if (wasEnabled) {
-      // asyncだけど待たなくてOK。止めに行くだけ
-      stopWhiteNoise();
+    } catch (e) {
+      console.warn('[Audio] オーディオコンテキストのアンロックに失敗しました:', e);
+      // アンロックに失敗しても、トグルの試みは続行します
     }
   }
 
-  saveSettings();
+  // --- (2) 従来のトグル処理 ---
+  isTTSEnabled = !isTTSEnabled; 
+  console.log(`[TTS] TTS状態が ${isTTSEnabled} に変更されました。`);
+
+  // --- (3) 両方のボタンのUIを更新 ---
+  // (※UIの更新方法は、元のHTML/CSSの実装に合わせて適宜変更してください)
+  const buttons = [
+    document.getElementById("ttsToggle"), 
+    document.getElementById("ttsToggle2")
+  ];
+  
+  buttons.forEach(btn => {
+    if (btn) {
+      // 例: テキストを更新
+      btn.textContent = isTTSEnabled ? '音声OFF' : '音声ON';
+      
+      // 例: クラスをトグルする場合 (もし 'active' クラスなどで制御している場合)
+      // btn.classList.toggle('active', isTTSEnabled); 
+    }
+  });
+
+  // --- (4) OFFにした場合は、現在再生中の音声をすべて停止 ---
+  if (!isTTSEnabled && 'speechSynthesis' in window) {
+    console.log('[TTS] 音声がOFFにされたため、現在の発話をキャンセルします。');
+    speechSynthesis.cancel();
+  }
 }
-
-
-/**
- * 音声ON/OFFボタン（2つ）のイベントリスナー
- */
-document.getElementById("ttsToggle").addEventListener("click", toggleTTS);
-document.getElementById("ttsToggle2").addEventListener("click", toggleTTS);
 
 // ==========================================
 // シナリオCSVローダー
