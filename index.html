@@ -529,7 +529,6 @@ let scrollTimeout = null;
 
 let ttsAbort = false;
 let ttsTestTimer = null;
-let __didLoadSettings = false;
 
 
 
@@ -561,12 +560,13 @@ function saveSettings() {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
+let __didLoadSettings = false; // 二重初期化で設定が巻き戻らないようにする
+
 async function loadSettings() {
   if (__didLoadSettings) {
     return;
   }
   __didLoadSettings = true;
-
 
   const savedSettings = localStorage.getItem(SETTINGS_KEY);
 
@@ -586,7 +586,7 @@ async function loadSettings() {
     const settings = JSON.parse(savedSettings);
 
     // =========================
-    // 1. 本部名などの基本設定復元
+    // 1. 基本設定復元（本部名）
     // =========================
     const commanderInput = document.getElementById('commanderInput');
     commanderName = settings.commanderName || "本部";
@@ -629,8 +629,8 @@ async function loadSettings() {
     }
 
     // =========================
-    // 3. 既にAudioノードがある場合だけゲインを反映
-    //    （AudioContextまわりは触らない。TTSだけが目的）
+    // 3. すでにAudioノードがある場合だけゲイン反映
+    //    （AudioContextはここでは作らない）
     // =========================
     if (typeof masterGain !== "undefined" &&
         masterGain &&
@@ -669,7 +669,7 @@ async function loadSettings() {
     }
 
     // =========================
-    // 4. 特別警戒モードの復元
+    // 4. 特別警戒モード復元
     // =========================
     if (typeof settings.isSpecialAlertMode === 'boolean') {
       isSpecialAlertMode = settings.isSpecialAlertMode;
@@ -682,29 +682,19 @@ async function loadSettings() {
     }
 
     // =========================
-    // 5. TTS音声（Apple対応ここが本題）
+    // 5. TTS音声 (iOS / Safari 対応・状態保持対応)
     // =========================
-    // 目的:
-    // - iOS / macOS Safari は getVoices() が最初 空配列[] のことがある
-    // - voiceschanged イベントがそもそも発火しない場合もある
-    // - なので「無音1文字を一回だけ speak() してからもう一回 getVoices()」という
-    //   ハックを使って、できるだけ確実に声を取得する
-    //
-    // さらに:
-    // - まだ1つもvoiceが取れなかった場合はUIもchosenVoiceも無理に触らない
-    //   → Safariが遅延初期化中でも落ちない
-    // - 取得できた場合だけ voiceSel を更新し、chosenVoice を決定する
-    //
-    const voiceSelect = document.getElementById('voiceSel');
+    const voiceSelEl = document.getElementById("voiceSel");
 
-    if ('speechSynthesis' in window && voiceSelect) {
-      // 内部ユーティリティ: 安定してvoicesを取る
+    if (voiceSelEl && 'speechSynthesis' in window) {
+
+      // (A) まずは安定して voices を取るヘルパー
       async function getStableVoices() {
-        // 1. まず普通に取得
+        // 1. いまのリスト
         let voices = speechSynthesis.getVoices();
         if (voices.length > 0) return voices;
 
-        // 2. iOS Safari 対策: 無音Utteranceで刺激
+        // 2. iOS対策: 無音Utteranceでエンジン起こす
         await new Promise(r => {
           const u = new SpeechSynthesisUtterance(' ');
           u.volume = 0;
@@ -713,17 +703,15 @@ async function loadSettings() {
           try {
             speechSynthesis.speak(u);
           } catch (_) {
-            // speak() が例外になっても、とりあえず続ける
             r();
           }
         });
 
-        // 3. もう一回試す
+        // 3. 再取得
         voices = speechSynthesis.getVoices();
         if (voices.length > 0) return voices;
 
-        // 4. それでも空なら、
-        //    voiceschanged を once で待つ or 500msタイムアウトで諦める
+        // 4. 最後に voiceschanged or タイムアウト待ち
         return await new Promise(resolve => {
           let done = false;
           function finish(vs) {
@@ -732,7 +720,6 @@ async function loadSettings() {
             resolve(vs);
           }
 
-          // もう一度直後の状態をチェック
           const vsNow = speechSynthesis.getVoices();
           if (vsNow.length > 0) {
             finish(vsNow);
@@ -753,40 +740,57 @@ async function loadSettings() {
 
       const voices = await getStableVoices();
 
-      // voices がまだ空 = Safariがまだ音声リストを返せてない状態
-      // → この場合はUI/選択などは触らず、chosenVoiceはnullのまま
       if (!voices || voices.length === 0) {
+        // Safariがまだvoiceを返してない → 何もしない
         console.warn('[TTS] No voices available yet (Safari delayed).');
         chosenVoice = null;
       } else {
-        // 候補を作る（日本語優先。なければ全体）
+        // 日本語優先
         const jaVoices = voices.filter(v => /^ja/i.test(v.lang));
-        const renderList = jaVoices.length > 0 ? jaVoices : voices;
+        const listForSelect = jaVoices.length > 0 ? jaVoices : voices;
 
-        // セレクトボックスを描画し直し
-        voiceSelect.innerHTML = renderList
-          .map((v, i) => `<option value="${i}">${v.name} (${v.lang})</option>`)
+        // (B) セレクトを構築する。optionのvalueに「元のvoices配列のインデックス」を埋める
+        voiceSelEl.innerHTML = listForSelect
+          .map(v => {
+            const realIndex = voices.indexOf(v); // ←これがズレ防止の肝
+            return `<option value="${realIndex}">${v.name} (${v.lang})</option>`;
+          })
           .join('');
 
-        // 設定からのvoiceIndexをできるだけ尊重
+        // (C) 設定側のvoiceIndexを尊重して chosenVoice を決める
         const idxFromSettings = parseInt(settings.voiceIndex);
-        let chosenFromSettings = null;
+        let candidate = null;
         if (!isNaN(idxFromSettings) && voices[idxFromSettings]) {
-          chosenFromSettings = voices[idxFromSettings];
+          candidate = voices[idxFromSettings];
         }
 
-        // chosenVoiceを決定
         chosenVoice =
+          candidate ||
           jaVoices[0] ||
-          chosenFromSettings ||
           voices[0] ||
           null;
 
-        // UI上の選択状態はとりあえず0番目にする
-        voiceSelect.value = "0";
+        // UI上の選択状態を chosenVoice に合わせる
+        if (chosenVoice) {
+          const chosenRealIndex = voices.indexOf(chosenVoice);
+          if (chosenRealIndex >= 0) {
+            voiceSelEl.value = String(chosenRealIndex);
+          }
+        }
 
         console.log('[TTS] chosenVoice:', chosenVoice);
       }
+
+      // (D) ユーザーがドロップダウンを変えたら必ず chosenVoice を更新＆保存
+      voiceSelEl.addEventListener('change', () => {
+        const allVoices = speechSynthesis.getVoices();
+        const newIdx = parseInt(voiceSelEl.value);
+        if (!isNaN(newIdx) && allVoices[newIdx]) {
+          chosenVoice = allVoices[newIdx];
+        }
+
+        saveSettings();
+      });
     }
 
   } catch (e) {
@@ -794,6 +798,7 @@ async function loadSettings() {
     localStorage.removeItem(SETTINGS_KEY);
   }
 }
+
 
 // --- PATCH START (iOS TTS warmup) ---
 let ttsReady = false;
@@ -2347,70 +2352,71 @@ loadVoices();
 
 async function speakMessage(text, isTest = false) {
   return new Promise((resolve, reject) => {
-    // ちょい待ち（既存ロジックを維持）
     setTimeout(() => {
       if (!('speechSynthesis' in window)) {
         resolve();
         return;
       }
 
-      // ---- ここが重要：UIから最新状態を再取得する ----
-      // 速度
+      // === 最新UI値で毎回上書きする ===
+      // rate
       const rateSliderEl = document.getElementById("rateSlider");
       if (rateSliderEl) {
         ttsRate = parseFloat(rateSliderEl.value) || ttsRate;
       }
 
-      // 音量（TTS用ボリューム、マスター含む）
-      const ttsVolumeSliderEl = document.getElementById("ttsVolumeSlider");
-      if (ttsVolumeSliderEl) {
-        ttsVolume = parseFloat(ttsVolumeSliderEl.value) || ttsVolume;
+      // volume
+      const ttsVolEl = document.getElementById("ttsVolumeSlider");
+      if (ttsVolEl) {
+        ttsVolume = parseFloat(ttsVolEl.value) || ttsVolume;
       }
 
-      let masterVol = 1.0;
-      if (masterGain) {
+      // master volume (ミキサー側)
+      const masterVolSliderEl = document.getElementById("masterVolumeSlider");
+      let masterVol;
+      if (masterGain && masterGain.gain) {
         masterVol = masterGain.gain.value;
+      } else if (masterVolSliderEl) {
+        masterVol = parseFloat(masterVolSliderEl.value) || 1.0;
       } else {
-        const mvEl = document.getElementById("masterVolumeSlider");
-        if (mvEl) {
-          masterVol = parseFloat(mvEl.value) || masterVol;
-        }
+        masterVol = 1.0;
       }
 
-      // voiceSelect から voice を取り直して chosenVoice を更新
-      const voiceSelectEl = document.getElementById("voiceSel");
-      if (voiceSelectEl && 'speechSynthesis' in window) {
+      // voiceセレクト側の変更を反映
+      const voiceSelEl = document.getElementById("voiceSel");
+      if (voiceSelEl && speechSynthesis.getVoices) {
         const allVoices = speechSynthesis.getVoices();
-        const idx = parseInt(voiceSelectEl.value);
-        if (!isNaN(idx)) {
-          // voiceSelectに表示しているリストとallVoicesのindexは
-          // 厳密にはズレる場合があるけど、
-          // 実運用で「表示してるのは先頭から順番」の前提で合わせにいく
+        const selIndex = parseInt(voiceSelEl.value);
+        if (!isNaN(selIndex)) {
+          // voiceSel は日本語のみなど絞り込みUIの場合があるので注意:
+          // ここでは「選ばれてる番号に対応する声を安全に拾えたら chosenVoice を更新」
+          if (allVoices[selIndex]) {
+            chosenVoice = allVoices[selIndex];
+          }
+        }
+        // さらに保険: もし chosenVoice が無効なら再補正
+        if (!chosenVoice && allVoices.length > 0) {
           chosenVoice =
-            allVoices[idx] ||
-            chosenVoice ||
             allVoices.find(v => /^ja/i.test(v.lang)) ||
             allVoices[0] ||
             null;
         }
       }
 
-      // chosenVoice がいまだに取れない場合、最後にフォールバック
-      if (!chosenVoice) {
-        const retryVoices = speechSynthesis.getVoices();
-        if (retryVoices.length > 0) {
-          chosenVoice =
-            retryVoices.find(v => /^ja/i.test(v.lang)) ||
-            retryVoices[0] ||
-            null;
-        }
-      }
+      // ここまでで chosenVoice / ttsRate / ttsVolume / masterVol を
+      // その瞬間のUIに同期できた
 
-      // ---- Utteranceを生成して再生 ----
+      // === ここから実際にUtteranceを作る ===
       const utter = new SpeechSynthesisUtterance(text);
 
-      // voice が null でもOK（iOSはOSデフォルトで読む）
-      utter.voice = chosenVoice || null;
+      // voiceが無効だとiOSは勝手にデフォルトに戻すので
+      // (それ自体は許す) けど一応代入はする
+      if (chosenVoice) {
+        utter.voice = chosenVoice;
+      } else {
+        utter.voice = null; // iOSならシステムの既定音声で読む
+      }
+
       utter.rate = ttsRate;
       utter.volume = ttsVolume * masterVol;
 
@@ -2424,11 +2430,9 @@ async function speakMessage(text, isTest = false) {
         }
       };
 
-      // Safari安定化のためにわずかに遅延
       setTimeout(() => {
         speechSynthesis.speak(utter);
       }, 50);
-
     }, 50);
   });
 }
@@ -2768,8 +2772,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     ttsTestTimer = setTimeout(async () => {
       if ('speechSynthesis' in window && TTS_ENABLED) {
         try {
-          speechSynthesis.cancel();
           // OFF中は喋らない、ONなら1回だけテスト
+          speechSynthesis.cancel();
           await speakMessage("音量テスト", true);
         } catch (err) {
           console.warn("TTS test speak failed:", err);
