@@ -132,7 +132,7 @@ PARAM,units_backup,,,,,中央201;中央202;中央203;中央204;中央205;中央2
       0.2,保護者連絡取れず,{unit}から{commander}、保護者と連絡が取れません。少年を{#directions}署へ連れて行きます。以上、{unit}。,
 
 1.0,大規模交通事故,,,,,type=traffic;level=3
-  1.0,通報受理,至急至急。{commander}から{unit}。{zone}で大規模な{type_ja}が発生した模様。多数の車両が関係している。至急現場へ向かうように。,alert=beep;need-response=true
+  1.0,通報受理,至急至急。{commander}から{unit}。{zone}で{type_ja}が発生した模様。多数の車両が関係している。至急現場へ向かうように。,alert=beep;need-response=true
     1.0,応答・転進,{unit}から{commander}、了解。{zone}へ急行する。,
       1.0,現着・状況報告,{unit}から{commander}、現場到着。車両{#num:5-10}台が関係する多重事故。負傷者は{#num:10-20}名以上。応援と救急の緊急手配を要請する。,need-response=true
         1.0,応援指示,{commander}から{unit}、了解。{backup_unit}及び交通執行隊は現場へ急行するように。{unit}は負傷者の救護と交通整理を最優先にするように。防災局・救急にも最大規模で要請する。,need-response=true;alert=beep
