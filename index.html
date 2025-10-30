@@ -38,7 +38,6 @@
 
     html,
     body {
-      height: 100%;
       margin: 0;
       overflow: hidden;
     }
@@ -51,9 +50,10 @@
       background: var(--bg-primary);
       color: var(--text-primary);
       font: 14px/1.6 'M PLUS 1p', sans-serif;
-      display: grid;
+      display: flex; /* ← gridからflexに変更 */
+      flex-direction: column; /* ← 追加 */
       font-weight: 500;
-      grid-template-rows: auto auto 1fr;
+      height: 100vh;
     }
 
     .system-header {
@@ -203,8 +203,9 @@
       grid-template-columns: 400px 1fr;
       gap: 0;
       overflow: hidden;
-      height: 100%;
+      flex: 1; /* ← height: 100%の代わりに追加 */
     }
+
 
     .case-panel {
       background: var(--bg-secondary);
@@ -295,8 +296,22 @@
     .case-units { color: var(--accent-cyan); font-weight: 300; }
     .case-time { color: var(--text-muted); font-family: 'DSEG7', sans-serif; }
     .msg-time { color: var(--text-muted); font-family: 'DSEG7', sans-serif; }
-    .radio-panel { background: var(--bg-primary); display: flex; flex-direction: column; min-height: 0; }
-    .radio-log { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; padding-bottom: 40px; }
+    
+    .radio-panel { 
+      background: var(--bg-primary); 
+      display: flex; 
+      flex-direction: column; 
+      min-height: 0;
+      height: 100%; /* ← 追加 */
+    }
+    .radio-log { 
+      flex: 1; 
+      overflow-y: auto; 
+      overflow-x: hidden; 
+      padding: 12px; 
+      min-height: 0; /* ← heightの代わりにmin-heightを使用 */
+    }
+
     .radio-message { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; margin-bottom: 8px; background: var(--bg-secondary); border-left: 3px solid transparent; border-radius: 4px; transition: all 0.2s; opacity: 0; transform: translateY(10px); animation: slideIn 0.3s ease-out forwards; }
     .radio-message.alert { background: repeating-linear-gradient( -45deg, rgba(33, 33, 33, 0.6), rgba(33, 33, 33, 0.6) 12px, var(--bg-secondary) 12px, var(--bg-secondary) 24px ); border-left-color: #ff3b3b; border-left-width: 4px; }
     .radio-message.alert .msg-content { text-shadow: 1px 1px 3px rgba(0,0,0,0.7); }
@@ -315,6 +330,7 @@
       .main-content {
         grid-template-columns: 1fr;
         grid-template-rows: auto 1fr;
+        min-height: 0; /* ← 追加 */
       }
 
       .case-panel {
@@ -406,7 +422,6 @@
       }
 
     }
-
     /* --- Emergency Overlay Styles (変更なし) --- */
     #emergency-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 9999; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.1s ease-in-out; backdrop-filter: blur(5px); }
     #emergency-overlay.active { opacity: 1; pointer-events: auto; }
@@ -417,6 +432,17 @@
     .stripe-band.top { top: 0; }
     .stripe-band.bottom { bottom: 0; }
     @keyframes scroll-stripe { from { background-position-x: 0; } to { background-position-x: -42.4264px; } }
+    
+  .disclaimer{
+    width: 100%;
+    text-align: center;
+    color: #707070;
+    padding: 10px;
+    border-top: 3px solid #3a3a3a;
+    background: var(--bg-secondary);
+    font-size: 11px;
+    flex-shrink: 0; /* ← 追加：縮小しない */
+  }
   </style>
 </head>
 
@@ -505,8 +531,7 @@
     </div>
   </div>
 
-  <div class="disclaimer">
-⚠️ 本シミュレータは完全に架空のものです。実際の警察無線とは異なります。
+  <div class="disclaimer">本シミュレータは完全に架空のものです。実際の警察無線とは異なります。
   </div>
 
 <script>
